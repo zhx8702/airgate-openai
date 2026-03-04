@@ -86,23 +86,36 @@ gateway:
       input_price: 5.0
       output_price: 40.0
 
-  credential_fields:
-    - key: api_key
+  account_types:
+    - key: apikey
       label: API Key
-      type: password
-      required: false
-      placeholder: "sk-..."
-    - key: access_token
-      label: Access Token (OAuth)
-      type: password
-      required: false
-      placeholder: "eyJhbG..."
-    - key: chatgpt_account_id
-      label: ChatGPT Account ID
-      type: text
-      required: false
-    - key: base_url
-      label: API 地址
-      type: text
-      required: true
-      placeholder: "https://api.openai.com"
+      description: 使用 OpenAI API Key 直连
+      fields:
+        - key: api_key
+          label: API Key
+          type: password
+          required: true
+          placeholder: "sk-..."
+        - key: base_url
+          label: API 地址
+          type: text
+          required: false
+          placeholder: "https://api.openai.com"
+    - key: oauth
+      label: OAuth 登录
+      description: 使用 ChatGPT Access Token（WebSocket 模式）
+      fields:
+        - key: access_token
+          label: Access Token
+          type: password
+          required: true
+          placeholder: "eyJhbG..."
+        - key: chatgpt_account_id
+          label: ChatGPT Account ID
+          type: text
+          required: false
+        - key: base_url
+          label: API 地址
+          type: text
+          required: false
+          placeholder: "https://api.openai.com"

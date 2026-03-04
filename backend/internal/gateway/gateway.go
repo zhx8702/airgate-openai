@@ -1,4 +1,4 @@
-package main
+package gateway
 
 import (
 	"context"
@@ -22,11 +22,26 @@ func (g *OpenAIGateway) Info() sdk.PluginInfo {
 		Description: "OpenAI Responses API / Chat Completions 转发",
 		Author:      "airgate",
 		Type:        sdk.PluginTypeGateway,
-		CredentialFields: []sdk.CredentialField{
-			{Key: "api_key", Label: "API Key", Type: "password", Required: false, Placeholder: "sk-..."},
-			{Key: "access_token", Label: "Access Token (OAuth)", Type: "password", Required: false, Placeholder: "eyJhbG..."},
-			{Key: "chatgpt_account_id", Label: "ChatGPT Account ID", Type: "text", Required: false},
-			{Key: "base_url", Label: "API 地址", Type: "text", Required: true, Placeholder: "https://api.openai.com"},
+		AccountTypes: []sdk.AccountType{
+			{
+				Key:         "apikey",
+				Label:       "API Key",
+				Description: "使用 OpenAI API Key 直连",
+				Fields: []sdk.CredentialField{
+					{Key: "api_key", Label: "API Key", Type: "password", Required: true, Placeholder: "sk-..."},
+					{Key: "base_url", Label: "API 地址", Type: "text", Required: false, Placeholder: "https://api.openai.com"},
+				},
+			},
+			{
+				Key:         "oauth",
+				Label:       "OAuth 登录",
+				Description: "使用 ChatGPT Access Token（WebSocket 模式）",
+				Fields: []sdk.CredentialField{
+					{Key: "access_token", Label: "Access Token", Type: "password", Required: true, Placeholder: "eyJhbG..."},
+					{Key: "chatgpt_account_id", Label: "ChatGPT Account ID", Type: "text", Required: false},
+					{Key: "base_url", Label: "API 地址", Type: "text", Required: false, Placeholder: "https://api.openai.com"},
+				},
+			},
 		},
 		ConfigFields: []sdk.ConfigField{
 			{Key: "default_timeout", Type: "duration", Default: "300s", Description: "默认请求超时"},

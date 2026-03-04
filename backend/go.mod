@@ -1,4 +1,4 @@
-module github.com/DouDOU-start/airgate-openai
+module github.com/DouDOU-start/airgate-openai/backend
 
 go 1.25.7
 
@@ -28,4 +28,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/DouDOU-start/airgate-sdk => ../airgate-sdk
+replace github.com/DouDOU-start/airgate-sdk => ../../airgate-sdk

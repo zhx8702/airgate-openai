@@ -1,4 +1,10 @@
 # 编译产物
 *.exe
-/chat
 /airgate-openai
+/backend/backend
+/backend/airgate-openai
+/backend/chat
+
+# 前端
+/web/node_modules/
+/web/dist/

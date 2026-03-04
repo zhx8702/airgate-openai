@@ -1,5 +1,5 @@
-// 公共 WebSocket 连接与事件处理，供插件主包和 cmd/chat 共用
-package openai
+// WebSocket 连接与事件处理，供网关转发和 cmd/chat 共用
+package gateway
 
 import (
 	"context"

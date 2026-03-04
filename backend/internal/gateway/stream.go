@@ -1,7 +1,8 @@
-package main
+package gateway
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -98,6 +99,129 @@ func handleNonStreamResponse(resp *http.Response, w http.ResponseWriter, start t
 		Model:        gjson.GetBytes(body, "model").String(),
 		Duration:     time.Since(start),
 	}, nil
+}
+
+// ParseSSEStream 从 SSE 流中解析事件，通过 handler 回调输出，返回统一的 WSResult
+// 供 cmd/chat 等外部调用者复用，与 ReceiveWSResponse 签名对齐
+func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
+	start := time.Now()
+	result := WSResult{}
+	var textBuilder strings.Builder
+
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		data, ok := extractSSEData(line)
+		if !ok || len(data) == 0 || data == "[DONE]" {
+			continue
+		}
+
+		var ev map[string]any
+		if json.Unmarshal([]byte(data), &ev) != nil {
+			continue
+		}
+
+		eventType, _ := ev["type"].(string)
+
+		// 通知 handler 原始事件
+		if handler != nil {
+			handler.OnRawEvent(eventType, []byte(data))
+		}
+
+		switch eventType {
+		case "response.created":
+			if resp, ok := ev["response"].(map[string]any); ok {
+				if id, ok := resp["id"].(string); ok {
+					result.ResponseID = id
+				}
+			}
+
+		case "response.output_text.delta":
+			if delta, ok := ev["delta"].(string); ok {
+				textBuilder.WriteString(delta)
+				if handler != nil {
+					handler.OnTextDelta(delta)
+				}
+			}
+
+		case "response.reasoning_summary_text.delta":
+			if delta, ok := ev["delta"].(string); ok {
+				if handler != nil {
+					handler.OnReasoningDelta(delta)
+				}
+			}
+
+		case "response.completed", "response.done":
+			if resp, ok := ev["response"].(map[string]any); ok {
+				if id, ok := resp["id"].(string); ok {
+					result.ResponseID = id
+				}
+				if m, ok := resp["model"].(string); ok {
+					result.Model = m
+				}
+				if usage, ok := resp["usage"].(map[string]any); ok {
+					result.InputTokens = JsonInt(usage, "input_tokens")
+					result.OutputTokens = JsonInt(usage, "output_tokens")
+					if details, ok := usage["input_tokens_details"].(map[string]any); ok {
+						result.CacheTokens = JsonInt(details, "cached_tokens")
+					}
+				}
+			}
+			result.Text = textBuilder.String()
+			result.Duration = time.Since(start)
+			return result
+
+		case "response.failed":
+			errMsg := data
+			if resp, ok := ev["response"].(map[string]any); ok {
+				if errObj, ok := resp["error"].(map[string]any); ok {
+					if m, ok := errObj["message"].(string); ok {
+						errMsg = m
+					}
+				}
+			}
+			result.Err = fmt.Errorf("上游错误: %s", errMsg)
+			result.Text = textBuilder.String()
+			result.Duration = time.Since(start)
+			return result
+
+		case "response.incomplete":
+			reason := "unknown"
+			if resp, ok := ev["response"].(map[string]any); ok {
+				if details, ok := resp["incomplete_details"].(map[string]any); ok {
+					if r, ok := details["reason"].(string); ok {
+						reason = r
+					}
+				}
+			}
+			result.Err = fmt.Errorf("响应不完整: %s", reason)
+			result.Text = textBuilder.String()
+			result.Duration = time.Since(start)
+			return result
+
+		case "codex.rate_limits":
+			if handler != nil {
+				if rateLimits, ok := ev["rate_limits"].(map[string]any); ok {
+					if primary, ok := rateLimits["primary"].(map[string]any); ok {
+						if used, ok := primary["used_percent"].(float64); ok {
+							handler.OnRateLimits(used)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil && result.Err == nil {
+		result.Err = fmt.Errorf("读取 SSE 失败: %w", err)
+	}
+
+	result.Text = textBuilder.String()
+	result.Duration = time.Since(start)
+	return result
 }
 
 // extractSSEData 从 SSE 行中提取 data 内容

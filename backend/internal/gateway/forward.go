@@ -1,10 +1,9 @@
-package main
+package gateway
 
 import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,12 +14,8 @@ import (
 	"time"
 
 	sdk "github.com/DouDOU-start/airgate-sdk"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
-//go:embed instructions.md
-var defaultInstructions string
 
 // ──────────────────────────────────────────────────────
 // 转发入口（三模式分发）
@@ -102,176 +97,104 @@ func (g *OpenAIGateway) forwardAPIKey(ctx context.Context, req *sdk.ForwardReque
 }
 
 // ──────────────────────────────────────────────────────
-// URL 构建
+// OAuth 模式：WebSocket 连上游，SSE 写回客户端
 // ──────────────────────────────────────────────────────
 
-// resolveAPIKeyRoute 解析 API Key 模式的上游请求方法与路径
-func resolveAPIKeyRoute(req *sdk.ForwardRequest) (string, string) {
-	reqPath := extractForwardedPath(req.Headers)
-	reqMethod := strings.ToUpper(strings.TrimSpace(req.Headers.Get("X-Forwarded-Method")))
+// forwardOAuth 使用 WebSocket 连接上游，将响应以 SSE 格式写回客户端
+func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardRequest) (*sdk.ForwardResult, error) {
+	start := time.Now()
+	account := req.Account
 
-	// 兜底推断
-	if reqPath == "" {
-		trimmed := bytes.TrimSpace(req.Body)
-		switch {
-		case len(trimmed) == 0 && !req.Stream:
-			reqPath = "/v1/models"
-		case gjson.GetBytes(trimmed, "messages").Exists() && !gjson.GetBytes(trimmed, "input").Exists():
-			reqPath = "/v1/chat/completions"
-		default:
-			reqPath = "/v1/responses"
+	// 建立 WebSocket 连接
+	cfg := WSConfig{
+		Token:     account.Credentials["access_token"],
+		AccountID: account.Credentials["chatgpt_account_id"],
+		ProxyURL:  account.ProxyURL,
+	}
+	conn, _, err := DialWebSocket(cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// 构建 response.create 消息
+	createMsg, err := g.buildWSRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("构建 WebSocket 请求失败: %w", err)
+	}
+
+	// 发送请求
+	if err := conn.WriteJSON(json.RawMessage(createMsg)); err != nil {
+		return nil, fmt.Errorf("发送 WebSocket 消息失败: %w", err)
+	}
+
+	// 设置 SSE 响应头
+	w := req.Writer
+	if w != nil {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+	}
+
+	// 读取 WS 消息，转为 SSE 写回客户端
+	handler := &sseEventWriter{w: w}
+	if f, ok := w.(http.Flusher); ok {
+		handler.flusher = f
+	}
+	result := ReceiveWSResponse(ctx, conn, handler)
+
+	// 发送 SSE 结束标记
+	if w != nil {
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		if handler.flusher != nil {
+			handler.flusher.Flush()
 		}
 	}
 
-	if reqMethod == "" {
-		if reqPath == "/v1/models" {
-			reqMethod = http.MethodGet
-		} else {
-			reqMethod = http.MethodPost
-		}
+	fwdResult := &sdk.ForwardResult{
+		StatusCode:   http.StatusOK,
+		InputTokens:  result.InputTokens,
+		OutputTokens: result.OutputTokens,
+		CacheTokens:  result.CacheTokens,
+		Model:        result.Model,
+		Duration:     time.Since(start),
 	}
-
-	switch reqMethod {
-	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodHead:
-	default:
-		reqMethod = http.MethodPost
+	if result.Err != nil {
+		fwdResult.StatusCode = http.StatusBadGateway
+		return fwdResult, result.Err
 	}
-
-	if !strings.HasPrefix(reqPath, "/") {
-		reqPath = "/" + reqPath
-	}
-	return reqMethod, reqPath
-}
-
-// extractForwardedPath 从透传头中提取原始请求路径
-func extractForwardedPath(headers http.Header) string {
-	if headers == nil {
-		return ""
-	}
-
-	candidates := []string{
-		"X-Forwarded-Path",
-		"X-Request-Path",
-		"X-Original-URI",
-		"X-Rewrite-URL",
-	}
-	for _, key := range candidates {
-		raw := strings.TrimSpace(headers.Get(key))
-		if raw == "" {
-			continue
-		}
-		if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-			if u, err := url.Parse(raw); err == nil {
-				path := strings.TrimSpace(u.EscapedPath())
-				if path != "" {
-					if u.RawQuery != "" {
-						return path + "?" + u.RawQuery
-					}
-					return path
-				}
-			}
-		}
-		if strings.HasPrefix(raw, "/") {
-			return raw
-		}
-	}
-	return ""
-}
-
-// buildAPIKeyURL 根据账号 base_url 和请求路径构建上游 URL
-func buildAPIKeyURL(account *sdk.Account, reqPath string) string {
-	baseURL := strings.TrimRight(account.Credentials["base_url"], "/")
-	if baseURL == "" {
-		baseURL = "https://api.openai.com"
-	}
-
-	if reqPath == "" {
-		reqPath = "/v1/responses"
-	}
-
-	if strings.HasSuffix(baseURL, "/v1") {
-		return baseURL + strings.TrimPrefix(reqPath, "/v1")
-	}
-	return baseURL + reqPath
+	return fwdResult, nil
 }
 
 // ──────────────────────────────────────────────────────
-// 请求预处理
+// SSE 事件写入器（WSEventHandler 实现）
 // ──────────────────────────────────────────────────────
 
-// preprocessRequestBody 预处理请求体（同步 model 字段）
-func preprocessRequestBody(body []byte, model string) []byte {
-	if len(body) == 0 || model == "" {
-		return body
-	}
-
-	bodyModel := gjson.GetBytes(body, "model").String()
-	if bodyModel != model {
-		if modified, err := sjson.SetBytes(body, "model", model); err == nil {
-			return modified
-		}
-	}
-	return body
+// sseEventWriter 将 WS 事件转为 SSE 格式写入 http.ResponseWriter
+type sseEventWriter struct {
+	w       http.ResponseWriter
+	flusher http.Flusher
 }
 
-// wrapAsResponsesAPI 将请求包装为 Responses API 格式（模拟客户端模式）
-func wrapAsResponsesAPI(body []byte, model string) ([]byte, error) {
-	// 已是 Responses 格式（有 input 字段），只注入 instructions
-	if gjson.GetBytes(body, "input").Exists() {
-		result := body
-		if !gjson.GetBytes(body, "instructions").Exists() {
-			if modified, err := sjson.SetBytes(result, "instructions", defaultInstructions); err == nil {
-				result = modified
-			}
-		}
-		return result, nil
+func (s *sseEventWriter) OnTextDelta(string)      {}
+func (s *sseEventWriter) OnReasoningDelta(string)  {}
+func (s *sseEventWriter) OnRateLimits(float64)     {}
+
+func (s *sseEventWriter) OnRawEvent(eventType string, data []byte) {
+	if s.w == nil || eventType == "" {
+		return
 	}
-
-	// Chat Completions 格式（有 messages 字段）→ 转换为 Responses API input
-	if gjson.GetBytes(body, "messages").Exists() {
-		var input []any
-		messages := gjson.GetBytes(body, "messages").Array()
-		for _, msg := range messages {
-			role := msg.Get("role").String()
-			content := msg.Get("content").String()
-			if role == "" || content == "" {
-				continue
-			}
-
-			// 映射 role：assistant → assistant，其他 → user
-			apiRole := "user"
-			if role == "assistant" {
-				apiRole = "assistant"
-			}
-
-			// 映射 content type
-			contentType := "input_text"
-			if apiRole == "assistant" {
-				contentType = "output_text"
-			}
-
-			input = append(input, map[string]any{
-				"type": "message",
-				"role": apiRole,
-				"content": []map[string]string{
-					{"type": contentType, "text": content},
-				},
-			})
-		}
-
-		wrapped := map[string]any{
-			"model":        model,
-			"input":        input,
-			"instructions": defaultInstructions,
-			"stream":       true,
-			"store":        false,
-		}
-
-		return json.Marshal(wrapped)
+	// 过滤不需要转发给客户端的内部事件
+	switch eventType {
+	case "codex.rate_limits":
+		return
 	}
-
-	// 无法识别的格式，原样返回
-	return body, nil
+	fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", eventType, strings.ReplaceAll(string(data), "\n", ""))
+	if s.flusher != nil {
+		s.flusher.Flush()
+	}
 }
 
 // ──────────────────────────────────────────────────────
