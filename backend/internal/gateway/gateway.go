@@ -100,6 +100,7 @@ func (g *OpenAIGateway) Routes() []sdk.RouteDefinition {
 		{Method: "POST", Path: "/v1/responses", Description: "Responses API（Codex 核心端点）"},
 		{Method: "POST", Path: "/v1/chat/completions", Description: "Chat Completions API"},
 		{Method: "GET", Path: "/v1/models", Description: "模型列表"},
+		{Method: "WS", Path: "/v1/responses", Description: "Responses API（WebSocket）"},
 	}
 }
 
