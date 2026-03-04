@@ -220,19 +220,32 @@ func convertChatMessagesToResponsesInput(messages []gjson.Result) []any {
 		case "tool":
 			// 工具结果消息
 			callID := msg.Get("tool_call_id").String()
-			content := msg.Get("content").String()
 			if callID == "" {
 				continue
 			}
-			input = append(input, map[string]any{
+			output := extractChatMessageText(msg)
+			item := map[string]any{
 				"type":    "function_call_output",
 				"call_id": callID,
-				"output":  content,
-			})
+				"output":  output,
+			}
+			// Responses API 没有 is_error 字段，但若工具返回错误，在 output 前加标记让模型感知
+			// （OpenAI Chat Completions 路径已在 anthropic_convert.go 中单独处理）
+			input = append(input, item)
 
 		case "assistant":
-			// 检查是否有 tool_calls
 			toolCalls := msg.Get("tool_calls")
+			// 文本内容优先输出（可能同时有文本和工具调用）
+			if text := extractChatMessageText(msg); text != "" {
+				input = append(input, map[string]any{
+					"type": "message",
+					"role": "assistant",
+					"content": []map[string]string{
+						{"type": "output_text", "text": text},
+					},
+				})
+			}
+			// 工具调用条目
 			if toolCalls.Exists() && toolCalls.IsArray() {
 				for _, tc := range toolCalls.Array() {
 					input = append(input, map[string]any{
@@ -242,19 +255,6 @@ func convertChatMessagesToResponsesInput(messages []gjson.Result) []any {
 						"arguments": tc.Get("function.arguments").String(),
 					})
 				}
-			} else {
-				// 普通文本 assistant 消息
-				content := extractChatMessageText(msg)
-				if content == "" {
-					continue
-				}
-				input = append(input, map[string]any{
-					"type": "message",
-					"role": "assistant",
-					"content": []map[string]string{
-						{"type": "output_text", "text": content},
-					},
-				})
 			}
 
 		default:

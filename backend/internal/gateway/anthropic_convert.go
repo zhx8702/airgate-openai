@@ -199,10 +199,15 @@ func convertAnthropicMsgToOpenAI(msg AnthropicMsgParam) []map[string]any {
 			hasContent = true
 
 		case "tool_result":
+			content := extractToolResultContent(block.Content)
+			// is_error: true 时在内容前加错误标记，让模型感知工具执行失败
+			if block.IsError != nil && *block.IsError {
+				content = "[tool_error] " + content
+			}
 			toolResult := map[string]any{
 				"role":         "tool",
 				"tool_call_id": derefStr(block.ToolUseID),
-				"content":      extractToolResultContent(block.Content),
+				"content":      content,
 			}
 			toolResults = append(toolResults, toolResult)
 		}
