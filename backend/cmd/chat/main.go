@@ -31,6 +31,7 @@ func main() {
 	model := flag.String("model", "gpt-5.3-codex", "模型名称")
 	proxy := flag.String("proxy", "", "代理地址（可选）")
 	useWS := flag.Bool("ws", false, "使用 WebSocket 协议（默认 SSE）")
+	reasoning := flag.String("reasoning", "medium", "思考强度: none/minimal/low/medium/high/xhigh")
 	flag.Parse()
 
 	if *token == "" {
@@ -64,8 +65,9 @@ func main() {
 				AccountID: *accountID,
 				ProxyURL:  *proxy,
 			},
-			model:    *model,
-			cacheKey: generateCacheKey(),
+			model:     *model,
+			cacheKey:  generateCacheKey(),
+			reasoning: *reasoning,
 		}
 		defer ws.close()
 		session = ws
@@ -76,6 +78,7 @@ func main() {
 			accountID: *accountID,
 			model:     *model,
 			cacheKey:  generateCacheKey(),
+			reasoning: *reasoning,
 		}
 	}
 
@@ -131,6 +134,7 @@ type sseSession struct {
 	history   []any  // 累积的 input 消息
 	turnState string // 粘性路由令牌
 	cacheKey  string // prompt 缓存 key，同一会话内保持不变
+	reasoning string // 思考强度
 }
 
 func (s *sseSession) chat(input string) error {
@@ -147,6 +151,7 @@ func (s *sseSession) chat(input string) error {
 		"stream":           true,
 		"store":            false,
 		"prompt_cache_key": s.cacheKey,
+		"reasoning":        buildReasoning(s.reasoning),
 	}
 
 	body, _ := json.Marshal(reqBody)
@@ -213,6 +218,7 @@ type wsSession struct {
 	previousResponseID string
 	cacheKey           string
 	turnState          string // 粘性路由令牌
+	reasoning          string // 思考强度
 }
 
 func (s *wsSession) connect() error {
@@ -264,6 +270,7 @@ func (s *wsSession) chat(input string) error {
 		"stream":           true,
 		"store":            false,
 		"prompt_cache_key": s.cacheKey,
+		"reasoning":        buildReasoning(s.reasoning),
 	}
 
 	if s.previousResponseID != "" {
@@ -353,6 +360,13 @@ func printStats(model string, input, output, cache int, duration time.Duration) 
 	if input > 0 || output > 0 {
 		fmt.Fprintf(os.Stderr, "\n[%s | 输入: %d 输出: %d 缓存: %d | %s]",
 			model, input, output, cache, duration.Round(time.Millisecond))
+	}
+}
+
+func buildReasoning(effort string) map[string]any {
+	return map[string]any{
+		"effort":  effort,
+		"summary": "auto",
 	}
 }
 
