@@ -461,85 +461,14 @@ func (t *anthropicStreamTranslator) handleResponsesToolDone() error {
 }
 
 // handleWebSearchCallStart 处理 response.output_item.added item_type=web_search_call
-// 翻译为 tool_use block（name=web_search），让客户端显示搜索进度
+// web_search 是上游内置工具，客户端不感知，直接忽略
 func (t *anthropicStreamTranslator) handleWebSearchCallStart(itemID string) error {
-	if t.webSearchBlocks[itemID] {
-		return nil
-	}
-
-	// 确保 message_start 已发送
-	if !t.hasStarted {
-		t.hasStarted = true
-		if err := t.emitMessageStart(); err != nil {
-			return err
-		}
-	}
-
-	// 关闭之前打开的 text/thinking block
-	if t.hasTextContentStarted {
-		if err := t.closeCurrentContentBlock(); err != nil {
-			return err
-		}
-		t.contentIndex++
-		t.hasTextContentStarted = false
-	}
-	if t.hasThinkingContentStarted {
-		if err := t.flushPendingSignature(); err != nil {
-			return err
-		}
-		if err := t.closeCurrentContentBlock(); err != nil {
-			return err
-		}
-		t.contentIndex++
-		t.hasThinkingContentStarted = false
-	}
-
 	t.webSearchBlocks[itemID] = true
-
-	// 发送 server_tool_use block（Anthropic 原生工具类型，客户端只展示不执行）
-	if err := t.enqueueEvent(&AnthropicStreamEvent{
-		Type:  "content_block_start",
-		Index: ptrInt64(t.contentIndex),
-		ContentBlock: &AnthropicMessageContentBlock{
-			Type:  "server_tool_use",
-			ID:    itemID,
-			Name:  ptrStr("web_search"),
-			Input: json.RawMessage("{}"),
-		},
-	}); err != nil {
-		return err
-	}
-	t.hasToolContentStarted = true
 	return nil
 }
 
 // handleWebSearchCallDone 处理 response.output_item.done item_type=web_search_call
-// 用 query 填充 input，关闭 tool_use block
 func (t *anthropicStreamTranslator) handleWebSearchCallDone(itemID, query string) error {
-	if !t.webSearchBlocks[itemID] || !t.hasToolContentStarted {
-		return nil
-	}
-
-	// 发送 query 作为 input_json_delta
-	if query != "" {
-		inputJSON := fmt.Sprintf(`{"query":%q}`, query)
-		if err := t.enqueueEvent(&AnthropicStreamEvent{
-			Type:  "content_block_delta",
-			Index: ptrInt64(t.contentIndex),
-			Delta: &AnthropicStreamDelta{
-				Type:        ptrStr("input_json_delta"),
-				PartialJSON: ptrStr(inputJSON),
-			},
-		}); err != nil {
-			return err
-		}
-	}
-
-	if err := t.closeCurrentContentBlock(); err != nil {
-		return err
-	}
-	t.contentIndex++
-	t.hasToolContentStarted = false
 	return nil
 }
 
