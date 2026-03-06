@@ -307,13 +307,9 @@ func convertAnthropicRequestToResponses(rawJSON []byte, modelName, mappingEffort
 				// 客户端显式指定 effort，直接使用
 				reasoningEffort = effort
 				clientEffortSet = true
-			} else if inferred := inferAdaptiveEffort(rawJSON, mappingEffort); inferred != "" {
-				// 动态推断：只读工具结果处理 → 降低 effort 加快响应
-				reasoningEffort = inferred
-				clientEffortSet = true
 			}
-			// 都未匹配时，不设 clientEffortSet，
-			// 让模型映射默认值（如 Opus→high）生效
+			// 未指定时不设 clientEffortSet，
+			// 让模型映射默认值（如 Opus→xhigh）生效
 		case "disabled":
 			if effort := thinkingBudgetToReasoningEffort(0); effort != "" {
 				reasoningEffort = effort
@@ -326,13 +322,15 @@ func convertAnthropicRequestToResponses(rawJSON []byte, modelName, mappingEffort
 		reasoningEffort = mappingEffort
 	}
 
-	// ─── 固定参数 ───
+	// ─── 固定参数（对齐 Codex CLI ResponsesApiRequest）───
 	template, _ = sjson.Set(template, "parallel_tool_calls", true)
 	template, _ = sjson.Set(template, "reasoning.effort", reasoningEffort)
 	template, _ = sjson.Set(template, "reasoning.summary", "auto")
 	template, _ = sjson.Set(template, "stream", true)
 	template, _ = sjson.Set(template, "store", false)
 	template, _ = sjson.Set(template, "include", []string{"reasoning.encrypted_content"})
+	template, _ = sjson.Set(template, "service_tier", "priority")       // 优先队列，降低首 token 延迟
+	template, _ = sjson.Set(template, "text.verbosity", "medium")       // 输出简练度（对齐 Codex CLI 默认值）
 
 	return []byte(template)
 }

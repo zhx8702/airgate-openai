@@ -76,7 +76,7 @@ func (g *OpenAIGateway) forwardAnthropicMessage(ctx context.Context, req *sdk.Fo
 			"spark", sparkTargetModel,
 			"body_size", len(body))
 		modelName = sparkTargetModel
-		mappingEffort = "low"
+		mappingEffort = "medium"
 		sparkOverride = true
 	}
 
@@ -90,11 +90,17 @@ func (g *OpenAIGateway) forwardAnthropicMessage(ctx context.Context, req *sdk.Fo
 		responsesBody = injectWebSearchToolJSON(responsesBody)
 	}
 
+	// 5.5 Spark 路由覆盖 verbosity（搜索结果只需简短决策）
+	if sparkOverride {
+		responsesBody, _ = sjson.SetBytes(responsesBody, "text.verbosity", "low")
+	}
+
 	g.logger.Info("[Anthropic→Responses] 转换完成",
 		"model", gjson.GetBytes(responsesBody, "model").String(),
 		"tools", gjson.GetBytes(responsesBody, "tools.#").Int(),
 		"input_items", gjson.GetBytes(responsesBody, "input.#").Int(),
 		"reasoning_effort", gjson.GetBytes(responsesBody, "reasoning.effort").String(),
+		"verbosity", gjson.GetBytes(responsesBody, "text.verbosity").String(),
 		"spark_override", sparkOverride,
 	)
 
