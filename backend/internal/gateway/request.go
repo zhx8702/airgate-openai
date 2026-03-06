@@ -247,11 +247,19 @@ func ensureResponsesDefaults(body []byte) []byte {
 		result = modified
 	}
 
+	// 注入 Codex CLI 优化参数（对齐 anthropic_convert.go 的处理）
+	if !gjson.GetBytes(result, "service_tier").Exists() {
+		result, _ = sjson.SetBytes(result, "service_tier", "priority")
+	}
+	if !gjson.GetBytes(result, "text.verbosity").Exists() {
+		result, _ = sjson.SetBytes(result, "text.verbosity", "medium")
+	}
+
 	// 剥离 Codex 上游不支持的参数
 	// context_management: Codex 返回 "Unsupported parameter: context_management"
 	// truncation: Codex 不支持
 	// max_output_tokens / max_completion_tokens: Codex Responses 不接受 token 限制字段
-	// temperature / top_p / service_tier: Codex 不支持采样参数
+	// temperature / top_p: Codex 不支持采样参数
 	for _, field := range []string{
 		"context_management",
 		"truncation",
@@ -259,7 +267,6 @@ func ensureResponsesDefaults(body []byte) []byte {
 		"max_completion_tokens",
 		"temperature",
 		"top_p",
-		"service_tier",
 		"user",
 	} {
 		if gjson.GetBytes(result, field).Exists() {
@@ -271,53 +278,26 @@ func ensureResponsesDefaults(body []byte) []byte {
 }
 
 // getModelMetadataByID 返回网关内置模型元信息，用于 /v1/models 字段补齐与上下文预算估算
+// 数据来源：model_registry.go 集中注册表
 func getModelMetadataByID(modelID string) map[string]any {
-	window := modelContextWindow(modelID)
-	if window <= 0 {
+	spec := lookupModelSpec(modelID)
+	if spec.ContextWindow <= 0 {
 		return nil
 	}
 	meta := map[string]any{
-		"context_length":   window,
-		"context_window":   window,
-		"max_input_tokens": window,
+		"context_length":   spec.ContextWindow,
+		"context_window":   spec.ContextWindow,
+		"max_input_tokens": spec.ContextWindow,
 	}
-	switch strings.ToLower(strings.TrimSpace(modelID)) {
-	case "codex-mini-latest", "gpt-4o", "gpt-4o-mini":
-		meta["max_output_tokens"] = 16384
-	case "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano":
-		meta["max_output_tokens"] = 32768
-	case "o3", "o3-pro", "o4-mini", "o3-mini":
-		meta["max_output_tokens"] = 32768
-	case "gpt-5-codex", "gpt-5-codex-mini", "gpt-5.1-codex", "gpt-5.1-codex-mini",
-		"gpt-5.1-codex-max", "gpt-5.2-codex", "gpt-5.3-codex", "gpt-5.3-codex-spark":
-		meta["max_output_tokens"] = 128000
-	case "gpt-5", "gpt-5.1", "gpt-5.2":
-		meta["max_output_tokens"] = 128000
+	if spec.MaxOutputTokens > 0 {
+		meta["max_output_tokens"] = spec.MaxOutputTokens
 	}
 	return meta
 }
 
+// modelContextWindow 返回模型上下文窗口大小（从集中注册表查询）
 func modelContextWindow(model string) int {
-	switch strings.ToLower(strings.TrimSpace(model)) {
-	case "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano":
-		return 1047576
-	case "gpt-4o", "gpt-4o-mini", "codex-mini-latest":
-		return 128000
-	case "o3", "o3-pro", "o4-mini", "o3-mini":
-		return 200000
-	// Codex 5.x 系列
-	case "gpt-5-codex", "gpt-5.1-codex", "gpt-5.1-codex-max",
-		"gpt-5.2-codex", "gpt-5.3-codex":
-		return 400000
-	case "gpt-5-codex-mini", "gpt-5.1-codex-mini":
-		return 400000
-	case "gpt-5.3-codex-spark":
-		return 128000
-	case "gpt-5", "gpt-5.1", "gpt-5.2":
-		return 400000
-	default:
-		return 200000
-	}
+	return lookupModelSpec(model).ContextWindow
 }
 
 // convertChatMessagesToResponsesInput 将 Chat Completions messages 转换为 Responses API input 列表

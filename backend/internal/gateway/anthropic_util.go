@@ -276,7 +276,7 @@ func extractResponsesUsage(usage gjson.Result) (int64, int64, int64) {
 }
 
 // ──────────────────────────────────────────────────────
-// 动态推理 effort 推断（adaptive thinking 优化）
+// 工具轮次检测（Spark 路由）
 // ──────────────────────────────────────────────────────
 
 // isToolTurnMatching 通用检测：最后一轮是否为工具结果处理轮次，且所有工具都满足 predicate
@@ -336,40 +336,11 @@ func isToolTurnMatching(rawJSON []byte, toolMatcher func(string) bool) bool {
 	return hasToolUse && allMatch
 }
 
-// isReadOnlyToolTurn 检测当前请求是否为只读工具结果处理轮次（用于 adaptive effort 降级）
-func isReadOnlyToolTurn(rawJSON []byte) bool {
-	return isToolTurnMatching(rawJSON, isReadOnlyTool)
-}
-
 // isSparkEligibleToolTurn 检测当前请求是否适合路由到 Spark 模型
-// 比 isReadOnlyToolTurn 更严格：仅 Grep/Glob/Search/Find 等搜索类工具
+// 仅 Grep/Glob/Search/Find 等搜索类工具
 // Read/Fetch 返回完整内容可能需要深度分析，不适合 Spark
 func isSparkEligibleToolTurn(rawJSON []byte) bool {
 	return isToolTurnMatching(rawJSON, isSparkEligibleTool)
-}
-
-// inferAdaptiveEffort 基于最后一轮 tool 类型动态推断 reasoning effort
-// 当最近一轮是只读工具的结果处理时，降低 effort 以加快响应
-// 返回 "" 表示无法推断，调用者应使用模型映射默认值
-func inferAdaptiveEffort(rawJSON []byte, modelDefault string) string {
-	if !isReadOnlyToolTurn(rawJSON) {
-		return ""
-	}
-	return lowerEffort(modelDefault)
-}
-
-// isReadOnlyTool 判断工具是否为只读/信息收集类（含 Read/Fetch，用于 effort 降级）
-func isReadOnlyTool(name string) bool {
-	lower := strings.ToLower(name)
-	for _, kw := range []string{
-		"read", "grep", "glob", "search", "fetch",
-		"list", "find", "taskoutput", "taskget", "tasklist",
-	} {
-		if strings.Contains(lower, kw) {
-			return true
-		}
-	}
-	return false
 }
 
 // isSparkEligibleTool 判断工具是否适合 Spark 快速模型处理
@@ -386,20 +357,6 @@ func isSparkEligibleTool(name string) bool {
 		}
 	}
 	return false
-}
-
-// lowerEffort 将 effort 降低一级
-func lowerEffort(effort string) string {
-	switch effort {
-	case "xhigh":
-		return "high"
-	case "high":
-		return "medium"
-	case "medium":
-		return "low"
-	default:
-		return effort
-	}
 }
 
 // injectWebSearchToolJSON 向 Responses API JSON 请求体注入 web_search 工具

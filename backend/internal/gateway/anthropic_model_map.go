@@ -56,13 +56,13 @@ var (
 // anthropicModelMappings Claude 模型名 → OpenAI 模型映射表
 // 精确匹配优先，通配符匹配其次
 var anthropicModelMappings = map[string]anthropicModelMapping{
-	// Opus → 高推理（默认 high，客户端 thinking 可覆盖）
-	"claude-opus-4-6": {OpenAIModel: opusTargetModel, ReasoningEffort: "high"},
-	"claude-opus-4-5": {OpenAIModel: opusTargetModel, ReasoningEffort: "high"},
+	// Opus → 最高推理（默认 xhigh，客户端 thinking 可覆盖）
+	"claude-opus-4-6": {OpenAIModel: opusTargetModel, ReasoningEffort: "xhigh"},
+	"claude-opus-4-5": {OpenAIModel: opusTargetModel, ReasoningEffort: "xhigh"},
 
-	// Sonnet → 中推理
-	"claude-sonnet-4-6": {OpenAIModel: sonnetTargetModel, ReasoningEffort: "medium"},
-	"claude-sonnet-4-5": {OpenAIModel: sonnetTargetModel, ReasoningEffort: "medium"},
+	// Sonnet → 高推理
+	"claude-sonnet-4-6": {OpenAIModel: sonnetTargetModel, ReasoningEffort: "high"},
+	"claude-sonnet-4-5": {OpenAIModel: sonnetTargetModel, ReasoningEffort: "high"},
 
 	// Haiku → Spark 快速模型，低推理，不可用时降级到 codex
 	"claude-haiku-4-6": {OpenAIModel: haikuTargetModel, FallbackModel: haikuFallbackModel, ReasoningEffort: "low"},
@@ -79,9 +79,9 @@ var anthropicWildcardMappings = []struct {
 	// claude-haiku-4-5-* 所有变体（如 claude-haiku-4-5-20251001）
 	{"claude-haiku-4-5", anthropicModelMapping{OpenAIModel: haikuTargetModel, FallbackModel: haikuFallbackModel, ReasoningEffort: "low"}},
 	// claude-sonnet-4- 所有变体
-	{"claude-sonnet-4-", anthropicModelMapping{OpenAIModel: sonnetTargetModel, ReasoningEffort: "medium"}},
+	{"claude-sonnet-4-", anthropicModelMapping{OpenAIModel: sonnetTargetModel, ReasoningEffort: "high"}},
 	// claude-opus-4- 所有变体
-	{"claude-opus-4-", anthropicModelMapping{OpenAIModel: opusTargetModel, ReasoningEffort: "high"}},
+	{"claude-opus-4-", anthropicModelMapping{OpenAIModel: opusTargetModel, ReasoningEffort: "xhigh"}},
 	// claude-haiku- 所有变体
 	{"claude-haiku-", anthropicModelMapping{OpenAIModel: haikuTargetModel, FallbackModel: haikuFallbackModel, ReasoningEffort: "low"}},
 	// claude-3.5/3 系列兜底

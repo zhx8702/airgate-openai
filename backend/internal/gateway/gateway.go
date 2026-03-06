@@ -85,29 +85,7 @@ func (g *OpenAIGateway) Platform() string {
 }
 
 func (g *OpenAIGateway) Models() []sdk.ModelInfo {
-	return []sdk.ModelInfo{
-		// Codex 5.x 系列
-		{ID: "gpt-5.3-codex", Name: "GPT 5.3 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
-		{ID: "gpt-5.3-codex-spark", Name: "GPT 5.3 Codex Spark", MaxTokens: 128000, InputPrice: 0.5, OutputPrice: 2.0},
-		{ID: "gpt-5.2-codex", Name: "GPT 5.2 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
-		{ID: "gpt-5.1-codex", Name: "GPT 5.1 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
-		{ID: "gpt-5-codex", Name: "GPT 5 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
-		// Codex 旧版
-		{ID: "codex-mini-latest", Name: "Codex Mini", MaxTokens: 128000, InputPrice: 1.5, OutputPrice: 6.0},
-		// GPT 系列
-		{ID: "gpt-4.1", Name: "GPT-4.1", MaxTokens: 1047576, InputPrice: 2.0, OutputPrice: 8.0},
-		{ID: "gpt-4.1-mini", Name: "GPT-4.1 Mini", MaxTokens: 1047576, InputPrice: 0.4, OutputPrice: 1.6},
-		{ID: "gpt-4.1-nano", Name: "GPT-4.1 Nano", MaxTokens: 1047576, InputPrice: 0.1, OutputPrice: 0.4},
-		{ID: "gpt-4o", Name: "GPT-4o", MaxTokens: 128000, InputPrice: 2.5, OutputPrice: 10.0},
-		{ID: "gpt-4o-mini", Name: "GPT-4o Mini", MaxTokens: 128000, InputPrice: 0.15, OutputPrice: 0.6},
-		// o 系列推理模型
-		{ID: "o3", Name: "o3", MaxTokens: 200000, InputPrice: 10.0, OutputPrice: 40.0},
-		{ID: "o3-pro", Name: "o3 Pro", MaxTokens: 200000, InputPrice: 20.0, OutputPrice: 80.0},
-		{ID: "o4-mini", Name: "o4-mini", MaxTokens: 200000, InputPrice: 1.1, OutputPrice: 4.4},
-		{ID: "o3-mini", Name: "o3-mini", MaxTokens: 200000, InputPrice: 1.1, OutputPrice: 4.4},
-		// 图像模型
-		{ID: "gpt-image-1", Name: "GPT Image 1", MaxTokens: 0, InputPrice: 5.0, OutputPrice: 40.0},
-	}
+	return allModelSpecs()
 }
 
 func (g *OpenAIGateway) Routes() []sdk.RouteDefinition {
