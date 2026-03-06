@@ -124,18 +124,16 @@ func (g *OpenAIGateway) doAnthropicForward(
 	// 选择转发方式
 	isOAuth := account.Credentials["access_token"] != ""
 
-	// 第一次尝试：传 nil writer（仅当有 fallback 时），以便错误时能重试
-	firstWriter := req.Writer
-	if fallbackModel != "" {
-		firstWriter = nil
-	}
+	// 始终传真实 writer（流式响应必须直接写入客户端）
+	// 当有 fallback 时，仅抑制错误响应写入（存入 FallbackErrBody 供降级判断）
+	hasFallback := fallbackModel != ""
 
 	var result *sdk.ForwardResult
 	var err error
 	if isOAuth {
-		result, err = g.forwardAnthropicViaOAuthResponses(ctx, req, responsesBody, originalModel, start, firstWriter)
+		result, err = g.forwardAnthropicViaOAuthResponses(ctx, req, responsesBody, originalModel, start, req.Writer, hasFallback)
 	} else {
-		result, err = g.forwardAnthropicViaAPIKeyResponses(ctx, req, responsesBody, originalModel, start, firstWriter)
+		result, err = g.forwardAnthropicViaAPIKeyResponses(ctx, req, responsesBody, originalModel, start, req.Writer, hasFallback)
 	}
 
 	// 检查是否需要模型降级
@@ -146,13 +144,13 @@ func (g *OpenAIGateway) doAnthropicForward(
 				"fallback", fallbackModel,
 				"status", result.StatusCode)
 
-			// 替换模型后重试，这次传真实 writer，不再降级
+			// 替换模型后重试，不再降级
 			responsesBody, _ = sjson.SetBytes(responsesBody, "model", fallbackModel)
 			fallbackStart := time.Now()
 			if isOAuth {
-				return g.forwardAnthropicViaOAuthResponses(ctx, req, responsesBody, originalModel, fallbackStart, req.Writer)
+				return g.forwardAnthropicViaOAuthResponses(ctx, req, responsesBody, originalModel, fallbackStart, req.Writer, false)
 			}
-			return g.forwardAnthropicViaAPIKeyResponses(ctx, req, responsesBody, originalModel, fallbackStart, req.Writer)
+			return g.forwardAnthropicViaAPIKeyResponses(ctx, req, responsesBody, originalModel, fallbackStart, req.Writer, false)
 		}
 
 		// 非模型错误，写回原始错误
@@ -163,6 +161,7 @@ func (g *OpenAIGateway) doAnthropicForward(
 }
 
 // forwardAnthropicViaOAuthResponses OAuth 模式：Responses API SSE → Anthropic SSE
+// suppressErrorWrite: 当 true 时，上游错误不写入客户端，存入 FallbackErrBody 供降级判断
 func (g *OpenAIGateway) forwardAnthropicViaOAuthResponses(
 	ctx context.Context,
 	req *sdk.ForwardRequest,
@@ -170,6 +169,7 @@ func (g *OpenAIGateway) forwardAnthropicViaOAuthResponses(
 	originalModel string,
 	start time.Time,
 	w http.ResponseWriter,
+	suppressErrorWrite bool,
 ) (*sdk.ForwardResult, error) {
 	account := req.Account
 
@@ -193,7 +193,11 @@ func (g *OpenAIGateway) forwardAnthropicViaOAuthResponses(
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return g.handleAnthropicUpstreamErrorWithFallback(resp, w, start)
+		errWriter := w
+		if suppressErrorWrite {
+			errWriter = nil // fallback 模式：不写入客户端，存入 FallbackErrBody
+		}
+		return g.handleAnthropicUpstreamErrorWithFallback(resp, errWriter, start)
 	}
 
 	isStream := gjson.GetBytes(req.Body, "stream").Bool()
@@ -206,6 +210,7 @@ func (g *OpenAIGateway) forwardAnthropicViaOAuthResponses(
 }
 
 // forwardAnthropicViaAPIKeyResponses API Key 模式：也统一走 Responses API
+// suppressErrorWrite: 当 true 时，上游错误不写入客户端，存入 FallbackErrBody 供降级判断
 func (g *OpenAIGateway) forwardAnthropicViaAPIKeyResponses(
 	ctx context.Context,
 	req *sdk.ForwardRequest,
@@ -213,6 +218,7 @@ func (g *OpenAIGateway) forwardAnthropicViaAPIKeyResponses(
 	originalModel string,
 	start time.Time,
 	w http.ResponseWriter,
+	suppressErrorWrite bool,
 ) (*sdk.ForwardResult, error) {
 	account := req.Account
 
@@ -253,7 +259,11 @@ func (g *OpenAIGateway) forwardAnthropicViaAPIKeyResponses(
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return g.handleAnthropicUpstreamErrorWithFallback(resp, w, start)
+		errWriter := w
+		if suppressErrorWrite {
+			errWriter = nil // fallback 模式：不写入客户端，存入 FallbackErrBody
+		}
+		return g.handleAnthropicUpstreamErrorWithFallback(resp, errWriter, start)
 	}
 
 	isStream := gjson.GetBytes(req.Body, "stream").Bool()
