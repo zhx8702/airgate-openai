@@ -63,13 +63,14 @@ func (g *OpenAIGateway) forwardAnthropicMessage(ctx context.Context, req *sdk.Fo
 	modelName := gjson.GetBytes(body, "model").String()
 
 	// 3.5 简单操作 → Spark 模型加速路由
-	// 当最后一轮是 Read/Grep/Glob 等只读工具结果处理时，
+	// 当最后一轮是 Grep/Glob/Search 等搜索类工具结果处理时，
 	// 用 Spark（128K 快速模型）替代主模型，失败时回退到原始映射模型
+	// 注：Read/Fetch 返回完整内容可能需要深度分析，不走 Spark
 	sparkOverride := false
 	originalMappedModel := modelName
 	const sparkContextGuard = 100 * 1024 // 100KB body 上限（对应 ~32K tokens，Spark 128K 留余量）
 	if sparkTargetModel != "" && sparkTargetModel != modelName &&
-		isReadOnlyToolTurn(body) && len(body) < sparkContextGuard {
+		isSparkEligibleToolTurn(body) && len(body) < sparkContextGuard {
 		g.logger.Info("简单操作路由到 Spark",
 			"original", modelName,
 			"spark", sparkTargetModel,

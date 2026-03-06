@@ -279,9 +279,9 @@ func extractResponsesUsage(usage gjson.Result) (int64, int64, int64) {
 // 动态推理 effort 推断（adaptive thinking 优化）
 // ──────────────────────────────────────────────────────
 
-// isReadOnlyToolTurn 检测当前请求是否为只读工具结果处理轮次
-// 条件：最后一条 user 消息全部是 tool_result，且前一条 assistant 的 tool_use 全是只读工具
-func isReadOnlyToolTurn(rawJSON []byte) bool {
+// isToolTurnMatching 通用检测：最后一轮是否为工具结果处理轮次，且所有工具都满足 predicate
+// 条件：最后一条 user 消息全部是 tool_result，且前一条 assistant 的 tool_use 全部满足 predicate
+func isToolTurnMatching(rawJSON []byte, toolMatcher func(string) bool) bool {
 	messages := gjson.GetBytes(rawJSON, "messages")
 	if !messages.IsArray() {
 		return false
@@ -319,21 +319,33 @@ func isReadOnlyToolTurn(rawJSON []byte) bool {
 	}
 
 	hasToolUse := false
-	allReadOnly := true
+	allMatch := true
 	prevContent := prevAssistant.Get("content")
 	if prevContent.IsArray() {
 		for _, block := range prevContent.Array() {
 			if block.Get("type").String() == "tool_use" {
 				hasToolUse = true
-				if !isReadOnlyTool(block.Get("name").String()) {
-					allReadOnly = false
+				if !toolMatcher(block.Get("name").String()) {
+					allMatch = false
 					break
 				}
 			}
 		}
 	}
 
-	return hasToolUse && allReadOnly
+	return hasToolUse && allMatch
+}
+
+// isReadOnlyToolTurn 检测当前请求是否为只读工具结果处理轮次（用于 adaptive effort 降级）
+func isReadOnlyToolTurn(rawJSON []byte) bool {
+	return isToolTurnMatching(rawJSON, isReadOnlyTool)
+}
+
+// isSparkEligibleToolTurn 检测当前请求是否适合路由到 Spark 模型
+// 比 isReadOnlyToolTurn 更严格：仅 Grep/Glob/Search/Find 等搜索类工具
+// Read/Fetch 返回完整内容可能需要深度分析，不适合 Spark
+func isSparkEligibleToolTurn(rawJSON []byte) bool {
+	return isToolTurnMatching(rawJSON, isSparkEligibleTool)
 }
 
 // inferAdaptiveEffort 基于最后一轮 tool 类型动态推断 reasoning effort
@@ -346,12 +358,28 @@ func inferAdaptiveEffort(rawJSON []byte, modelDefault string) string {
 	return lowerEffort(modelDefault)
 }
 
-// isReadOnlyTool 判断工具是否为只读/信息收集类
+// isReadOnlyTool 判断工具是否为只读/信息收集类（含 Read/Fetch，用于 effort 降级）
 func isReadOnlyTool(name string) bool {
 	lower := strings.ToLower(name)
 	for _, kw := range []string{
 		"read", "grep", "glob", "search", "fetch",
 		"list", "find", "taskoutput", "taskget", "tasklist",
+	} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSparkEligibleTool 判断工具是否适合 Spark 快速模型处理
+// 仅搜索/索引类工具（结果是路径列表或匹配行，决策简单）
+// Read/Fetch 返回完整内容需要深度分析，不走 Spark
+func isSparkEligibleTool(name string) bool {
+	lower := strings.ToLower(name)
+	for _, kw := range []string{
+		"grep", "glob", "search", "find", "list",
+		"taskoutput", "taskget", "tasklist",
 	} {
 		if strings.Contains(lower, kw) {
 			return true
