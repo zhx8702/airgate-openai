@@ -78,6 +78,25 @@ func (g *OpenAIGateway) forwardAPIKey(ctx context.Context, req *sdk.ForwardReque
 	// 透传白名单头
 	passHeaders(req.Headers, upstreamReq.Header)
 
+	// sub2api 账号：若客户端未携带 Codex CLI 身份，则注入 Codex 头避免 sub2api 注入无关 instructions
+	if isSub2APIAccount(account) && !isCodexCLI(req.Headers) {
+		setCodexClientHeaders(upstreamReq)
+	}
+
+	// sub2api 账号：注入 session 缓存标识（如客户端未提供），让 sub2api 实现 sticky session 路由
+	if isSub2APIAccount(account) && upstreamReq.Header.Get("Session_id") == "" {
+		modelName := gjson.GetBytes(body, "model").String()
+		sessionID := deriveSessionID(body, account, modelName)
+		body, _ = sjson.SetBytes(body, "prompt_cache_key", sessionID)
+		upstreamReq.Header.Set("Session_id", sessionID)
+		upstreamReq.Header.Set("Conversation_id", sessionID)
+		// 用注入后的 body 重建请求体
+		if methodAllowsBody(reqMethod) && len(body) > 0 {
+			upstreamReq.Body = io.NopCloser(bytes.NewReader(body))
+			upstreamReq.ContentLength = int64(len(body))
+		}
+	}
+
 	// 发送请求
 	client := g.buildHTTPClient(account)
 	resp, err := client.Do(upstreamReq)

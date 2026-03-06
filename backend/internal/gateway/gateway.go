@@ -86,7 +86,13 @@ func (g *OpenAIGateway) Platform() string {
 
 func (g *OpenAIGateway) Models() []sdk.ModelInfo {
 	return []sdk.ModelInfo{
-		// Codex 系列
+		// Codex 5.x 系列
+		{ID: "gpt-5.3-codex", Name: "GPT 5.3 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
+		{ID: "gpt-5.3-codex-spark", Name: "GPT 5.3 Codex Spark", MaxTokens: 128000, InputPrice: 0.5, OutputPrice: 2.0},
+		{ID: "gpt-5.2-codex", Name: "GPT 5.2 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
+		{ID: "gpt-5.1-codex", Name: "GPT 5.1 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
+		{ID: "gpt-5-codex", Name: "GPT 5 Codex", MaxTokens: 400000, InputPrice: 2.0, OutputPrice: 8.0},
+		// Codex 旧版
 		{ID: "codex-mini-latest", Name: "Codex Mini", MaxTokens: 128000, InputPrice: 1.5, OutputPrice: 6.0},
 		// GPT 系列
 		{ID: "gpt-4.1", Name: "GPT-4.1", MaxTokens: 1047576, InputPrice: 2.0, OutputPrice: 8.0},
