@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -52,6 +53,11 @@ func (p *ProxyHandler) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	headers := r.Header.Clone()
 	// 注入转发路径，供插件识别请求类型（如 /v1/messages → Anthropic）
 	headers.Set("X-Forwarded-Path", r.URL.Path)
+
+	slog.Debug("[请求] 收到转发请求",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"body", string(body))
 
 	fwdReq := &sdk.ForwardRequest{
 		Account: &sdk.Account{
