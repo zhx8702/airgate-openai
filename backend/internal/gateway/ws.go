@@ -39,6 +39,9 @@ type WSConfig struct {
 // WSResult 事件解析结果
 type WSResult struct {
 	Text              string
+	Reasoning         string
+	StopReason        string
+	ToolUses          []ToolUseBlock
 	ResponseID        string
 	Model             string
 	InputTokens       int
@@ -47,6 +50,14 @@ type WSResult struct {
 	CompletedEventRaw []byte
 	Duration          time.Duration
 	Err               error
+}
+
+// ToolUseBlock 表示从 Responses 流中聚合出的工具调用块。
+type ToolUseBlock struct {
+	Type  string          `json:"type"`
+	ID    string          `json:"id"`
+	Name  *string         `json:"name,omitempty"`
+	Input json.RawMessage `json:"input,omitempty"`
 }
 
 // WSEventHandler 事件回调接口，不同场景实现不同输出
@@ -107,14 +118,14 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 	start := time.Now()
 	result := WSResult{}
 	var textBuilder strings.Builder
+	var reasoningBuilder strings.Builder
 
 	for {
 		// 检查 context
 		select {
 		case <-ctx.Done():
 			result.Err = ctx.Err()
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 		default:
 		}
@@ -142,9 +153,7 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 		switch eventType {
 		case "response.created":
 			if resp, ok := ev["response"].(map[string]any); ok {
-				if id, ok := resp["id"].(string); ok {
-					result.ResponseID = id
-				}
+				mergeResponseMetadata(&result, resp)
 			}
 
 		case "response.output_text.delta":
@@ -157,20 +166,22 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 
 		case "response.reasoning_summary_text.delta":
 			if delta, ok := ev["delta"].(string); ok {
+				reasoningBuilder.WriteString(delta)
 				if handler != nil {
 					handler.OnReasoningDelta(delta)
 				}
 			}
 
+		case "response.output_item.done":
+			if item, ok := ev["item"].(map[string]any); ok {
+				appendToolUseBlock(&result, item)
+			}
+
 		case "response.completed", "response.done":
 			result.CompletedEventRaw = append([]byte(nil), msg...)
 			if resp, ok := ev["response"].(map[string]any); ok {
-				if id, ok := resp["id"].(string); ok {
-					result.ResponseID = id
-				}
-				if m, ok := resp["model"].(string); ok {
-					result.Model = m
-				}
+				mergeResponseMetadata(&result, resp)
+				result.StopReason = jsonString(resp["stop_reason"])
 				if usage, ok := resp["usage"].(map[string]any); ok {
 					result.InputTokens = JsonInt(usage, "input_tokens")
 					result.OutputTokens = JsonInt(usage, "output_tokens")
@@ -179,8 +190,7 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 					}
 				}
 			}
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "response.failed":
@@ -193,8 +203,7 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 				}
 			}
 			result.Err = fmt.Errorf("上游错误: %s", errMsg)
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "response.incomplete":
@@ -207,8 +216,7 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 				}
 			}
 			result.Err = fmt.Errorf("响应不完整: %s", reason)
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "error":
@@ -219,8 +227,7 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 				}
 			}
 			result.Err = fmt.Errorf("WebSocket 错误: %s", errMsg)
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "codex.rate_limits":
@@ -236,9 +243,112 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 		}
 	}
 
-	result.Text = textBuilder.String()
-	result.Duration = time.Since(start)
+	finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 	return result
+}
+
+func finalizeWSResult(result *WSResult, textBuilder, reasoningBuilder *strings.Builder, start time.Time) {
+	result.Text = textBuilder.String()
+	result.Reasoning = reasoningBuilder.String()
+	result.Duration = time.Since(start)
+}
+
+func mergeResponseMetadata(result *WSResult, response map[string]any) {
+	if id := jsonString(response["id"]); id != "" {
+		result.ResponseID = id
+	}
+	if model := jsonString(response["model"]); model != "" {
+		result.Model = model
+	}
+}
+
+func appendToolUseBlock(result *WSResult, item map[string]any) {
+	block := buildToolUseBlock(item)
+	if block == nil {
+		return
+	}
+	result.ToolUses = append(result.ToolUses, *block)
+}
+
+func buildToolUseBlock(item map[string]any) *ToolUseBlock {
+	switch jsonString(item["type"]) {
+	case "function_call":
+		return buildFunctionCallToolUse(item)
+	case "web_search_call":
+		return buildWebSearchToolUse(item)
+	default:
+		return nil
+	}
+}
+
+func buildFunctionCallToolUse(item map[string]any) *ToolUseBlock {
+	name := jsonString(item["name"])
+	if name == "" {
+		return nil
+	}
+
+	id := jsonString(item["call_id"])
+	if id == "" {
+		id = jsonString(item["id"])
+	}
+
+	return &ToolUseBlock{
+		Type:  "tool_use",
+		ID:    id,
+		Name:  stringPointer(name),
+		Input: normalizeToolUseInput(jsonString(item["arguments"])),
+	}
+}
+
+func buildWebSearchToolUse(item map[string]any) *ToolUseBlock {
+	name := "web_search"
+	return &ToolUseBlock{
+		Type:  "tool_use",
+		ID:    jsonString(item["id"]),
+		Name:  stringPointer(name),
+		Input: marshalToolUseInput(item["action"]),
+	}
+}
+
+func normalizeToolUseInput(raw string) json.RawMessage {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return json.RawMessage(`{}`)
+	}
+	if json.Valid([]byte(raw)) {
+		return json.RawMessage(raw)
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return json.RawMessage(encoded)
+}
+
+func marshalToolUseInput(value any) json.RawMessage {
+	if value == nil {
+		return json.RawMessage(`{}`)
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil || len(encoded) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return json.RawMessage(encoded)
+}
+
+func jsonString(value any) string {
+	if s, ok := value.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func stringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	v := value
+	return &v
 }
 
 // JsonInt 从 map[string]any 安全提取 int

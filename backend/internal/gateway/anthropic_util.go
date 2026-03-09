@@ -67,17 +67,22 @@ func thinkingBudgetToReasoningEffort(budget int64) string {
 
 // convertFinishReasonToAnthropic 将 OpenAI finish_reason 转为 Anthropic stop_reason
 func convertFinishReasonToAnthropic(reason string) string {
-	switch reason {
-	case "stop":
+	return normalizeAnthropicStopReason(reason)
+}
+
+// normalizeAnthropicStopReason 归一化 OpenAI/Responses stop_reason，输出 Anthropic 兼容值。
+func normalizeAnthropicStopReason(reason string) string {
+	switch normalized := strings.ToLower(strings.TrimSpace(reason)); normalized {
+	case "", "stop":
 		return "end_turn"
-	case "length":
+	case "length", "max_output_tokens":
 		return "max_tokens"
 	case "tool_calls":
 		return "tool_use"
 	case "content_filter":
 		return "refusal"
 	default:
-		return reason
+		return normalized
 	}
 }
 
@@ -375,4 +380,3 @@ func injectWebSearchToolJSON(body []byte) []byte {
 	}
 	return result
 }
-

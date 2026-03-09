@@ -1,0 +1,210 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/DouDOU-start/airgate-openai/backend/internal/gateway"
+	sdk "github.com/DouDOU-start/airgate-sdk"
+	"gopkg.in/yaml.v3"
+)
+
+const generatedComment = "# 本文件由 backend/cmd/genmanifest 自动生成，请勿手工修改。\n\n"
+
+type manifest struct {
+	ID             string           `yaml:"id"`
+	Name           string           `yaml:"name"`
+	Version        string           `yaml:"version"`
+	Description    string           `yaml:"description"`
+	Author         string           `yaml:"author"`
+	Type           string           `yaml:"type"`
+	MinCoreVersion string           `yaml:"min_core_version"`
+	Dependencies   []string         `yaml:"dependencies"`
+	Config         []configField    `yaml:"config,omitempty"`
+	Gateway        *gatewayManifest `yaml:"gateway,omitempty"`
+}
+
+type gatewayManifest struct {
+	Platform     string        `yaml:"platform"`
+	Mode         string        `yaml:"mode"`
+	Routes       []routeDef    `yaml:"routes,omitempty"`
+	Models       []modelInfo   `yaml:"models,omitempty"`
+	AccountTypes []accountType `yaml:"account_types,omitempty"`
+}
+
+type routeDef struct {
+	Method      string `yaml:"method"`
+	Path        string `yaml:"path"`
+	Description string `yaml:"description"`
+}
+
+type modelInfo struct {
+	ID          string  `yaml:"id"`
+	Name        string  `yaml:"name"`
+	MaxTokens   int     `yaml:"max_tokens"`
+	InputPrice  float64 `yaml:"input_price"`
+	OutputPrice float64 `yaml:"output_price"`
+	CachePrice  float64 `yaml:"cache_price,omitempty"`
+}
+
+type accountType struct {
+	Key         string            `yaml:"key"`
+	Label       string            `yaml:"label"`
+	Description string            `yaml:"description"`
+	Fields      []credentialField `yaml:"fields,omitempty"`
+}
+
+type credentialField struct {
+	Key         string `yaml:"key"`
+	Label       string `yaml:"label"`
+	Type        string `yaml:"type"`
+	Required    bool   `yaml:"required"`
+	Placeholder string `yaml:"placeholder,omitempty"`
+}
+
+type configField struct {
+	Key         string `yaml:"key"`
+	Type        string `yaml:"type"`
+	Default     string `yaml:"default,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	Required    bool   `yaml:"required"`
+}
+
+func main() {
+	content, err := renderManifest()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "生成 manifest 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	targetPath, err := manifestFilePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "定位 plugin.yaml 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.WriteFile(targetPath, content, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "写入 plugin.yaml 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("已生成 %s\n", targetPath)
+}
+
+func renderManifest() ([]byte, error) {
+	plugin := &gateway.OpenAIGateway{}
+	info := plugin.Info()
+
+	doc := manifest{
+		ID:             info.ID,
+		Name:           info.Name,
+		Version:        info.Version,
+		Description:    info.Description,
+		Author:         info.Author,
+		Type:           string(info.Type),
+		MinCoreVersion: gateway.PluginMinCoreVersion,
+		Dependencies:   gateway.PluginDependencies(),
+		Config:         convertConfigFields(info.ConfigFields),
+		Gateway: &gatewayManifest{
+			Platform:     plugin.Platform(),
+			Mode:         gateway.PluginMode,
+			Routes:       convertRoutes(plugin.Routes()),
+			Models:       convertModels(plugin.Models()),
+			AccountTypes: convertAccountTypes(info.AccountTypes),
+		},
+	}
+
+	var body bytes.Buffer
+	encoder := yaml.NewEncoder(&body)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(doc); err != nil {
+		return nil, err
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+
+	content := append([]byte(generatedComment), body.Bytes()...)
+	return content, nil
+}
+
+func manifestFilePath() (string, error) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("无法定位 genmanifest 源文件")
+	}
+
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
+	return filepath.Join(repoRoot, "plugin.yaml"), nil
+}
+
+func convertRoutes(routes []sdk.RouteDefinition) []routeDef {
+	items := make([]routeDef, 0, len(routes))
+	for _, route := range routes {
+		items = append(items, routeDef{
+			Method:      route.Method,
+			Path:        route.Path,
+			Description: route.Description,
+		})
+	}
+	return items
+}
+
+func convertModels(models []sdk.ModelInfo) []modelInfo {
+	items := make([]modelInfo, 0, len(models))
+	for _, model := range models {
+		items = append(items, modelInfo{
+			ID:          model.ID,
+			Name:        model.Name,
+			MaxTokens:   model.MaxTokens,
+			InputPrice:  model.InputPrice,
+			OutputPrice: model.OutputPrice,
+			CachePrice:  model.CachePrice,
+		})
+	}
+	return items
+}
+
+func convertAccountTypes(types []sdk.AccountType) []accountType {
+	items := make([]accountType, 0, len(types))
+	for _, item := range types {
+		items = append(items, accountType{
+			Key:         item.Key,
+			Label:       item.Label,
+			Description: item.Description,
+			Fields:      convertCredentialFields(item.Fields),
+		})
+	}
+	return items
+}
+
+func convertCredentialFields(fields []sdk.CredentialField) []credentialField {
+	items := make([]credentialField, 0, len(fields))
+	for _, field := range fields {
+		items = append(items, credentialField{
+			Key:         field.Key,
+			Label:       field.Label,
+			Type:        field.Type,
+			Required:    field.Required,
+			Placeholder: field.Placeholder,
+		})
+	}
+	return items
+}
+
+func convertConfigFields(fields []sdk.ConfigField) []configField {
+	items := make([]configField, 0, len(fields))
+	for _, field := range fields {
+		items = append(items, configField{
+			Key:         field.Key,
+			Type:        field.Type,
+			Default:     field.Default,
+			Description: field.Description,
+			Required:    field.Required,
+		})
+	}
+	return items
+}

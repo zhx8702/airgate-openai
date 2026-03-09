@@ -107,6 +107,7 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 	start := time.Now()
 	result := WSResult{}
 	var textBuilder strings.Builder
+	var reasoningBuilder strings.Builder
 
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -134,9 +135,7 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 		switch eventType {
 		case "response.created":
 			if resp, ok := ev["response"].(map[string]any); ok {
-				if id, ok := resp["id"].(string); ok {
-					result.ResponseID = id
-				}
+				mergeResponseMetadata(&result, resp)
 			}
 
 		case "response.output_text.delta":
@@ -149,20 +148,22 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 
 		case "response.reasoning_summary_text.delta":
 			if delta, ok := ev["delta"].(string); ok {
+				reasoningBuilder.WriteString(delta)
 				if handler != nil {
 					handler.OnReasoningDelta(delta)
 				}
 			}
 
+		case "response.output_item.done":
+			if item, ok := ev["item"].(map[string]any); ok {
+				appendToolUseBlock(&result, item)
+			}
+
 		case "response.completed", "response.done":
 			result.CompletedEventRaw = append([]byte(nil), []byte(data)...)
 			if resp, ok := ev["response"].(map[string]any); ok {
-				if id, ok := resp["id"].(string); ok {
-					result.ResponseID = id
-				}
-				if m, ok := resp["model"].(string); ok {
-					result.Model = m
-				}
+				mergeResponseMetadata(&result, resp)
+				result.StopReason = jsonString(resp["stop_reason"])
 				if usage, ok := resp["usage"].(map[string]any); ok {
 					result.InputTokens = JsonInt(usage, "input_tokens")
 					result.OutputTokens = JsonInt(usage, "output_tokens")
@@ -171,8 +172,7 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 					}
 				}
 			}
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "response.failed":
@@ -185,8 +185,7 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 				}
 			}
 			result.Err = fmt.Errorf("上游错误: %s", errMsg)
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "response.incomplete":
@@ -199,8 +198,7 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 				}
 			}
 			result.Err = fmt.Errorf("响应不完整: %s", reason)
-			result.Text = textBuilder.String()
-			result.Duration = time.Since(start)
+			finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 			return result
 
 		case "codex.rate_limits":
@@ -220,8 +218,7 @@ func ParseSSEStream(reader io.Reader, handler WSEventHandler) WSResult {
 		result.Err = fmt.Errorf("读取 SSE 失败: %w", err)
 	}
 
-	result.Text = textBuilder.String()
-	result.Duration = time.Since(start)
+	finalizeWSResult(&result, &textBuilder, &reasoningBuilder, start)
 	return result
 }
 
