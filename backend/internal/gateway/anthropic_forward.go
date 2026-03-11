@@ -258,16 +258,6 @@ func (g *OpenAIGateway) buildAnthropicUpstreamRequest(
 		// API Key 模式
 		setAuthHeaders(upstreamReq, account)
 		passHeaders(req.Headers, upstreamReq.Header)
-
-		// sub2api 特殊处理
-		if isSub2APIAccount(account) {
-			upstreamReq.Header.Del("OpenAI-Beta")
-			upstreamReq.Header.Del("ChatGPT-Account-ID")
-			setCodexClientHeaders(upstreamReq)
-
-			// 注入 session 缓存标识
-			injectSub2APISession(upstreamReq, responsesBody, account)
-		}
 	}
 
 	return upstreamReq, nil

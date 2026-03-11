@@ -61,10 +61,9 @@ const descStyle: React.CSSProperties = {
   marginTop: '0.25rem',
 };
 
-type AccountType = 'apikey' | 'sub2api' | 'oauth';
+type AccountType = 'apikey' | 'oauth';
 
 function detectType(credentials: Record<string, string>): AccountType | '' {
-  if (credentials.provider === 'sub2api') return 'sub2api';
   if (credentials.api_key) return 'apikey';
   if (credentials.access_token) return 'oauth';
   return '';
@@ -105,8 +104,6 @@ export function AccountForm({
       const baseUrl = credentials.base_url || '';
       if (type === 'apikey') {
         onChange({ api_key: '', base_url: baseUrl, provider: '' });
-      } else if (type === 'sub2api') {
-        onChange({ api_key: '', base_url: credentials.base_url || 'https://sub2api.xxxx.com', provider: 'sub2api' });
       } else {
         onChange({ access_token: '', refresh_token: '', chatgpt_account_id: '', base_url: baseUrl, provider: '' });
       }
@@ -169,14 +166,10 @@ export function AccountForm({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div>
         <span style={labelStyle}>账号类型 *</span>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div style={accountType === 'apikey' ? cardActiveStyle : cardStyle} onClick={() => handleTypeChange('apikey')}>
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--ag-text, #e8ecf4)' }}>API Key</div>
-            <div style={descStyle}>使用 OpenAI API Key 直连</div>
-          </div>
-          <div style={accountType === 'sub2api' ? cardActiveStyle : cardStyle} onClick={() => handleTypeChange('sub2api')}>
-            <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--ag-text, #e8ecf4)' }}>Sub2API</div>
-            <div style={descStyle}>使用 sub2api 转发（默认 Responses）</div>
+            <div style={descStyle}>支持所有 Responses 标准接口</div>
           </div>
           <div style={accountType === 'oauth' ? cardActiveStyle : cardStyle} onClick={() => handleTypeChange('oauth')}>
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--ag-text, #e8ecf4)' }}>OAuth 登录</div>
@@ -185,7 +178,7 @@ export function AccountForm({
         </div>
       </div>
 
-      {(accountType === 'apikey' || accountType === 'sub2api') && (
+      {accountType === 'apikey' && (
         <>
           <div>
             <label style={labelStyle}>
@@ -204,12 +197,12 @@ export function AccountForm({
             <input
               type="text"
               style={inputStyle}
-              placeholder={accountType === 'sub2api' ? 'https://sub2api.xxxxx.com' : 'https://api.openai.com'}
+              placeholder="https://api.openai.com"
               value={credentials.base_url ?? ''}
               onChange={(e) => updateField('base_url', e.target.value)}
             />
             <div style={{ ...descStyle, marginTop: '0.375rem' }}>
-              {accountType === 'sub2api' ? 'Sub2API 账号将自动按 sub2api 协议转发' : '留空使用默认地址，支持自定义反向代理'}
+              留空使用默认地址，支持自定义反向代理
             </div>
           </div>
         </>

@@ -25,8 +25,7 @@ AirGate 的 OpenAI 网关插件。
 
 | 类型 | 说明 |
 |------|------|
-| `apikey` | 直连 OpenAI API |
-| `sub2api` | 通过 sub2api 转发 |
+| `apikey` | 支持所有提供 Responses 标准接口的服务 |
 | `oauth` | 浏览器授权登录 ChatGPT |
 
 ## 转发流程
@@ -84,8 +83,6 @@ Anthropic JSON 请求
 │   │   │   └── assets.go             前端资源嵌入
 │   │   ├── model/                   模型注册表
 │   │   │   └── registry.go           集中模型规格定义
-│   │   └── session/                 Session 缓存
-│   │       └── cache.go              sub2api sticky session
 │   ├── resources/                   嵌入资源（系统提示词）
 │   └── devdata/                     开发服务器运行时数据（gitignore）
 ├── web/                            前端（插件自定义账号表单）

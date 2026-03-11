@@ -16,26 +16,8 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
-	"github.com/DouDOU-start/airgate-openai/backend/internal/session"
 	sdk "github.com/DouDOU-start/airgate-sdk"
 )
-
-// injectSub2APISession 为 sub2api 账号注入 session 缓存标识（sticky session 路由）
-// 返回可能修改后的 body 和是否注入了 session
-func injectSub2APISession(req *http.Request, body []byte, account *sdk.Account) []byte {
-	if !isSub2APIAccount(account) || req.Header.Get("Session_id") != "" {
-		return body
-	}
-	modelName := gjson.GetBytes(body, "model").String()
-	sessionID := session.DeriveID(body, account, modelName)
-	body, _ = sjson.SetBytes(body, "prompt_cache_key", sessionID)
-	req.Header.Set("Session_id", sessionID)
-	req.Header.Set("Conversation_id", sessionID)
-	// 用注入后的 body 重建请求体
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	return body
-}
 
 // ──────────────────────────────────────────────────────
 // 转发入口（三模式分发）
@@ -96,16 +78,6 @@ func (g *OpenAIGateway) forwardAPIKey(ctx context.Context, req *sdk.ForwardReque
 
 	// 透传白名单头
 	passHeaders(req.Headers, upstreamReq.Header)
-
-	// sub2api 账号：若客户端未携带 Codex CLI 身份，则注入 Codex 头避免 sub2api 注入无关 instructions
-	if isSub2APIAccount(account) && !isCodexCLI(req.Headers) {
-		setCodexClientHeaders(upstreamReq)
-	}
-
-	// sub2api 账号：注入 session 缓存标识
-	if methodAllowsBody(reqMethod) {
-		injectSub2APISession(upstreamReq, body, account)
-	}
 
 	// 发送请求
 	client := g.buildHTTPClient(account)
@@ -357,16 +329,4 @@ func (g *OpenAIGateway) buildHTTPClient(account *sdk.Account) *http.Client {
 		Transport: transport,
 		Timeout:   g.requestTimeout(),
 	}
-}
-
-// ──────────────────────────────────────────────────────
-// 工具函数
-// ──────────────────────────────────────────────────────
-
-func isSub2APIAccount(account *sdk.Account) bool {
-	if account == nil {
-		return false
-	}
-	provider := strings.ToLower(strings.TrimSpace(account.Credentials["provider"]))
-	return provider == "sub2api"
 }

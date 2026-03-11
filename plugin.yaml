@@ -129,7 +129,7 @@ gateway:
   account_types:
     - key: apikey
       label: API Key
-      description: 使用 OpenAI API Key 直连
+      description: 支持所有提供 Responses 标准接口的服务
       fields:
         - key: api_key
           label: API Key
@@ -141,25 +141,6 @@ gateway:
           type: text
           required: false
           placeholder: https://api.openai.com
-    - key: sub2api
-      label: Sub2API
-      description: 通过 sub2api API Key 转发（仅 Responses 协议）
-      fields:
-        - key: api_key
-          label: API Key
-          type: password
-          required: true
-          placeholder: sk-...
-        - key: base_url
-          label: API 地址
-          type: text
-          required: false
-          placeholder: https://sub2api.xxxx.com
-        - key: provider
-          label: Provider
-          type: text
-          required: false
-          placeholder: sub2api
     - key: oauth
       label: OAuth 登录
       description: 通过浏览器授权登录 ChatGPT 账号

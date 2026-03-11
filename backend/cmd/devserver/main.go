@@ -14,7 +14,8 @@ import (
 func main() {
 	gw := &gateway.OpenAIGateway{}
 	if err := devserver.Run(devserver.Config{
-		Plugin: gw,
+		Plugin:         gw,
+		SchedulePolicy: devserver.ScheduleWeightedRR,
 		ExtraRoutes: func(mux *http.ServeMux, store *devserver.AccountStore) {
 			h := &gateway.OAuthDevHandler{Gateway: gw, Store: store}
 			h.RegisterRoutes(mux)

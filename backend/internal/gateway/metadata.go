@@ -31,20 +31,10 @@ func BuildPluginInfo() sdk.PluginInfo {
 			{
 				Key:         "apikey",
 				Label:       "API Key",
-				Description: "使用 OpenAI API Key 直连",
+				Description: "支持所有提供 Responses 标准接口的服务",
 				Fields: []sdk.CredentialField{
 					{Key: "api_key", Label: "API Key", Type: "password", Required: true, Placeholder: "sk-..."},
 					{Key: "base_url", Label: "API 地址", Type: "text", Required: false, Placeholder: "https://api.openai.com"},
-				},
-			},
-			{
-				Key:         "sub2api",
-				Label:       "Sub2API",
-				Description: "通过 sub2api API Key 转发（仅 Responses 协议）",
-				Fields: []sdk.CredentialField{
-					{Key: "api_key", Label: "API Key", Type: "password", Required: true, Placeholder: "sk-..."},
-					{Key: "base_url", Label: "API 地址", Type: "text", Required: false, Placeholder: "https://sub2api.xxxx.com"},
-					{Key: "provider", Label: "Provider", Type: "text", Required: false, Placeholder: "sub2api"},
 				},
 			},
 			{
