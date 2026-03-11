@@ -13,6 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Clone airgate-sdk (go.work replace)
+        run: git clone --depth 1 https://github.com/DouDOU-start/airgate-sdk.git ../airgate-sdk
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
