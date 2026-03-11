@@ -84,7 +84,9 @@ func (g *OpenAIGateway) ValidateAccount(ctx context.Context, credentials map[str
 		if err != nil {
 			return fmt.Errorf("验证请求失败: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 
 		if resp.StatusCode == 401 {
 			return fmt.Errorf("API Key 无效")

@@ -130,7 +130,10 @@ func ReceiveWSResponse(ctx context.Context, conn *websocket.Conn, handler WSEven
 		default:
 		}
 
-		conn.SetReadDeadline(time.Now().Add(300 * time.Second))
+		if err := conn.SetReadDeadline(time.Now().Add(300 * time.Second)); err != nil {
+			result.Err = fmt.Errorf("设置 WebSocket 读取超时失败: %w", err)
+			break
+		}
 
 		_, msg, err := conn.ReadMessage()
 		if err != nil {

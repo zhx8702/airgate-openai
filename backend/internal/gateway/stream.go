@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	sdk "github.com/DouDOU-start/airgate-sdk"
 	"github.com/tidwall/gjson"
+
+	sdk "github.com/DouDOU-start/airgate-sdk"
 )
 
 // handleStreamResponse 处理 SSE 流式响应

@@ -37,10 +37,12 @@ func (h *OAuthDevHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"authorize_url": resp.AuthorizeURL,
 		"state":         resp.State,
-	})
+	}); err != nil {
+		log.Printf("编码 OAuth start 响应失败: %v", err)
+	}
 }
 
 // handleCallback 处理 POST /api/oauth/callback
@@ -82,8 +84,10 @@ func (h *OAuthDevHandler) handleCallback(w http.ResponseWriter, r *http.Request)
 	log.Printf("OAuth 授权成功，账号已创建: id=%d name=%s", account.ID, account.Name)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"account": account,
-	})
+	}); err != nil {
+		log.Printf("编码 OAuth callback 响应失败: %v", err)
+	}
 }

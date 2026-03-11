@@ -8,12 +8,22 @@ import (
 	"net/url"
 	"strings"
 
-	sdk "github.com/DouDOU-start/airgate-sdk"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
 	"github.com/DouDOU-start/airgate-openai/backend/internal/model"
+	sdk "github.com/DouDOU-start/airgate-sdk"
 )
+
+// modelMetadataOverrides 仅用于 /v1/models 响应补齐。
+// 某些上游模型需要保留历史上下文元数据，但不应出现在插件主动声明的支持模型列表中。
+var modelMetadataOverrides = map[string]model.Spec{
+	"gpt-4o": {
+		Name:            "GPT-4o",
+		ContextWindow:   128000,
+		MaxOutputTokens: 16384,
+	},
+}
 
 // ──────────────────────────────────────────────────────
 // Anthropic 请求检测
@@ -167,7 +177,11 @@ func preprocessRequestBody(body []byte, model, reqPath string) []byte {
 
 // getModelMetadataByID 返回网关内置模型元信息，用于 /v1/models 字段补齐与上下文预算估算
 func getModelMetadataByID(modelID string) map[string]any {
-	spec := model.Lookup(modelID)
+	id := strings.ToLower(strings.TrimSpace(modelID))
+	spec, ok := modelMetadataOverrides[id]
+	if !ok {
+		spec = model.Lookup(id)
+	}
 	if spec.ContextWindow <= 0 {
 		return nil
 	}

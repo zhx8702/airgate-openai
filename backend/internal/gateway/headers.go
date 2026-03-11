@@ -87,7 +87,7 @@ func passCodexRateLimitHeaders(src, dst http.Header) {
 	}
 	for _, key := range codexHeaders {
 		if v := src.Get(key); v != "" {
-			dst.Set(http.CanonicalHeaderKey(key), v)
+			dst.Set(key, v)
 		}
 	}
 }

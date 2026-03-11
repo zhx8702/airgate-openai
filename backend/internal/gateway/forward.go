@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	sdk "github.com/DouDOU-start/airgate-sdk"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
 	"github.com/DouDOU-start/airgate-openai/backend/internal/session"
+	sdk "github.com/DouDOU-start/airgate-sdk"
 )
 
 // injectSub2APISession 为 sub2api 账号注入 session 缓存标识（sticky session 路由）
@@ -104,7 +104,7 @@ func (g *OpenAIGateway) forwardAPIKey(ctx context.Context, req *sdk.ForwardReque
 
 	// sub2api 账号：注入 session 缓存标识
 	if methodAllowsBody(reqMethod) {
-		body = injectSub2APISession(upstreamReq, body, account)
+		injectSub2APISession(upstreamReq, body, account)
 	}
 
 	// 发送请求
@@ -113,7 +113,9 @@ func (g *OpenAIGateway) forwardAPIKey(ctx context.Context, req *sdk.ForwardReque
 	if err != nil {
 		return nil, fmt.Errorf("请求上游失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// 上游返回错误时，返回 error 让核心决定是否 failover
 	if resp.StatusCode >= 500 || resp.StatusCode == 429 || resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -221,7 +223,9 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	// 构建 response.create 消息
 	createMsg, err := g.buildWSRequest(req)
@@ -253,8 +257,7 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 
 	// 发送 SSE 结束标记
 	if w != nil {
-		fmt.Fprint(w, "data: [DONE]\n\n")
-		if handler.flusher != nil {
+		if _, err := fmt.Fprint(w, "data: [DONE]\n\n"); err == nil && handler.flusher != nil {
 			handler.flusher.Flush()
 		}
 	}
@@ -297,7 +300,9 @@ func (s *sseEventWriter) OnRawEvent(eventType string, data []byte) {
 	case "codex.rate_limits":
 		return
 	}
-	fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", eventType, strings.ReplaceAll(string(data), "\n", ""))
+	if _, err := fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", eventType, strings.ReplaceAll(string(data), "\n", "")); err != nil {
+		return
+	}
 	if s.flusher != nil {
 		s.flusher.Flush()
 	}

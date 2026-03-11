@@ -329,8 +329,8 @@ func convertAnthropicRequestToResponses(rawJSON []byte, modelName, mappingEffort
 	template, _ = sjson.Set(template, "stream", true)
 	template, _ = sjson.Set(template, "store", false)
 	template, _ = sjson.Set(template, "include", []string{"reasoning.encrypted_content"})
-	template, _ = sjson.Set(template, "service_tier", "priority")       // 优先队列，降低首 token 延迟
-	template, _ = sjson.Set(template, "text.verbosity", "medium")       // 输出简练度（对齐 Codex CLI 默认值）
+	template, _ = sjson.Set(template, "service_tier", "priority") // 优先队列，降低首 token 延迟
+	template, _ = sjson.Set(template, "text.verbosity", "medium") // 输出简练度（对齐 Codex CLI 默认值）
 
 	return []byte(template)
 }

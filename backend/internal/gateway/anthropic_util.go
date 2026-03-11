@@ -1,8 +1,6 @@
 package gateway
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"strconv"
 	"strings"
 
@@ -13,34 +11,6 @@ import (
 // ──────────────────────────────────────────────────────
 // 工具函数（纯函数，不依赖任何 struct）
 // ──────────────────────────────────────────────────────
-
-// generateMessageID 生成 Anthropic 消息 ID（msg_ 前缀）
-func generateMessageID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "msg_unknown"
-	}
-	return "msg_" + hex.EncodeToString(b)
-}
-
-// parseDataURL 解析 data:mime;base64,xxx 格式的 URL
-func parseDataURL(rawURL string) (mediaType, data string, ok bool) {
-	if !strings.HasPrefix(rawURL, "data:") {
-		return "", "", false
-	}
-	rest := rawURL[5:]
-	semicolonIdx := strings.Index(rest, ";")
-	if semicolonIdx < 0 {
-		return "", "", false
-	}
-	mediaType = rest[:semicolonIdx]
-	rest = rest[semicolonIdx+1:]
-	if !strings.HasPrefix(rest, "base64,") {
-		return "", "", false
-	}
-	data = rest[7:]
-	return mediaType, data, true
-}
 
 // thinkingBudgetToReasoningEffort 将 thinking budget_tokens 映射为 reasoning_effort（与 CLIProxyAPI ConvertBudgetToLevel 对齐）
 func thinkingBudgetToReasoningEffort(budget int64) string {
@@ -79,7 +49,6 @@ func normalizeAnthropicStopReason(reason string) string {
 		return normalized
 	}
 }
-
 
 // ──────────────────────────────────────────────────────
 // 工具名缩短

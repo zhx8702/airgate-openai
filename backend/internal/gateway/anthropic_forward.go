@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	sdk "github.com/DouDOU-start/airgate-sdk"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+
+	sdk "github.com/DouDOU-start/airgate-sdk"
 )
 
 // ──────────────────────────────────────────────────────
@@ -174,7 +175,7 @@ func (g *OpenAIGateway) forwardAnthropicResponses(
 	account := req.Account
 
 	// 构建上游 HTTP 请求（OAuth/APIKey 差异化处理）
-	upstreamReq, responsesBody, err := g.buildAnthropicUpstreamRequest(ctx, req, account, responsesBody)
+	upstreamReq, err := g.buildAnthropicUpstreamRequest(ctx, req, account, responsesBody)
 	if err != nil {
 		return nil, nil, fmt.Errorf("构建上游请求失败: %w", err)
 	}
@@ -185,7 +186,9 @@ func (g *OpenAIGateway) forwardAnthropicResponses(
 	if err != nil {
 		return nil, nil, fmt.Errorf("请求上游失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// 错误处理
 	if resp.StatusCode >= 400 {
@@ -224,7 +227,7 @@ func (g *OpenAIGateway) buildAnthropicUpstreamRequest(
 	req *sdk.ForwardRequest,
 	account *sdk.Account,
 	responsesBody []byte,
-) (*http.Request, []byte, error) {
+) (*http.Request, error) {
 	isOAuth := account.Credentials["access_token"] != ""
 
 	// 确定目标 URL
@@ -237,7 +240,7 @@ func (g *OpenAIGateway) buildAnthropicUpstreamRequest(
 
 	upstreamReq, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(responsesBody))
 	if err != nil {
-		return nil, responsesBody, err
+		return nil, err
 	}
 
 	// 公共头
@@ -263,11 +266,11 @@ func (g *OpenAIGateway) buildAnthropicUpstreamRequest(
 			setCodexClientHeaders(upstreamReq)
 
 			// 注入 session 缓存标识
-			responsesBody = injectSub2APISession(upstreamReq, responsesBody, account)
+			injectSub2APISession(upstreamReq, responsesBody, account)
 		}
 	}
 
-	return upstreamReq, responsesBody, nil
+	return upstreamReq, nil
 }
 
 // handleAnthropicNonStreamFromResponses 非流式：聚合 Responses SSE → Anthropic JSON
@@ -288,7 +291,7 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 
 	anthropicJSON := convertResponsesCompletedToAnthropicJSON(wsResult.CompletedEventRaw, originalRequest, model)
 	if anthropicJSON == "" {
-		return nil, fmt.Errorf("Responses 非流回译失败")
+		return nil, fmt.Errorf("responses 非流回译失败")
 	}
 
 	if w != nil {
@@ -352,4 +355,3 @@ func extractOpenAIErrorMessage(body []byte) string {
 	}
 	return ""
 }
-

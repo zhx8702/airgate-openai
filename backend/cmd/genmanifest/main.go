@@ -7,25 +7,26 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/DouDOU-start/airgate-openai/backend/internal/gateway"
 	sdk "github.com/DouDOU-start/airgate-sdk"
-	"gopkg.in/yaml.v3"
 )
 
 const generatedComment = "# 本文件由 backend/cmd/genmanifest 自动生成，请勿手工修改。\n\n"
 
 type manifest struct {
-	ID              string            `yaml:"id"`
-	Name            string            `yaml:"name"`
-	Version         string            `yaml:"version"`
-	Description     string            `yaml:"description"`
-	Author          string            `yaml:"author"`
-	Type            string            `yaml:"type"`
-	MinCoreVersion  string            `yaml:"min_core_version"`
-	Dependencies    []string          `yaml:"dependencies"`
-	Config          []configField     `yaml:"config,omitempty"`
-	FrontendWidgets []frontendWidget  `yaml:"frontend_widgets,omitempty"`
-	Gateway         *gatewayManifest  `yaml:"gateway,omitempty"`
+	ID              string           `yaml:"id"`
+	Name            string           `yaml:"name"`
+	Version         string           `yaml:"version"`
+	Description     string           `yaml:"description"`
+	Author          string           `yaml:"author"`
+	Type            string           `yaml:"type"`
+	MinCoreVersion  string           `yaml:"min_core_version"`
+	Dependencies    []string         `yaml:"dependencies"`
+	Config          []configField    `yaml:"config,omitempty"`
+	FrontendWidgets []frontendWidget `yaml:"frontend_widgets,omitempty"`
+	Gateway         *gatewayManifest `yaml:"gateway,omitempty"`
 }
 
 type gatewayManifest struct {
@@ -213,4 +214,3 @@ func convertCredentialFields(fields []sdk.CredentialField) []credentialField {
 	}
 	return items
 }
-

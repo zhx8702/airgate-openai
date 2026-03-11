@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	sdk "github.com/DouDOU-start/airgate-sdk"
 	"github.com/gorilla/websocket"
+
+	sdk "github.com/DouDOU-start/airgate-sdk"
 )
 
 // HandleWebSocket 处理入站 WebSocket 连接（实现 sdk.GatewayPlugin）
@@ -52,7 +53,9 @@ func (g *OpenAIGateway) handleWSWithOAuth(ctx context.Context, clientConn sdk.We
 	if err != nil {
 		return fmt.Errorf("连接上游 WebSocket 失败: %w", err)
 	}
-	defer upstreamConn.Close()
+	defer func() {
+		_ = upstreamConn.Close()
+	}()
 
 	g.logger.Info("上游 WebSocket 连接已建立", "account_id", account.ID)
 
@@ -69,7 +72,9 @@ func (g *OpenAIGateway) handleWSWithAPIKey(ctx context.Context, clientConn sdk.W
 	if err != nil {
 		return fmt.Errorf("连接上游 WebSocket 失败: %w", err)
 	}
-	defer upstreamConn.Close()
+	defer func() {
+		_ = upstreamConn.Close()
+	}()
 
 	g.logger.Info("上游 WebSocket 连接已建立（API Key）", "account_id", account.ID)
 

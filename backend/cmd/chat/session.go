@@ -10,9 +10,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/DouDOU-start/airgate-openai/backend/internal/gateway"
 	"github.com/DouDOU-start/airgate-openai/backend/resources"
-	"github.com/gorilla/websocket"
 )
 
 // ──────────────────────────────────────────────────────
@@ -74,7 +75,9 @@ func (s *sseSession) chat(input string) error {
 	if err != nil {
 		return fmt.Errorf("请求失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if ts := resp.Header.Get("x-codex-turn-state"); ts != "" {
 		s.turnState = ts
@@ -141,9 +144,13 @@ func (s *wsSession) connect() error {
 
 func (s *wsSession) close() {
 	if s.conn != nil {
-		s.conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-		s.conn.Close()
+		if err := s.conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
+			fmt.Fprintf(os.Stderr, "[关闭 WebSocket 写入失败: %v]\n", err)
+		}
+		if err := s.conn.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "[关闭 WebSocket 连接失败: %v]\n", err)
+		}
 		s.conn = nil
 	}
 }
