@@ -14,8 +14,10 @@
 /web/dist/
 
 # 前端构建产物（嵌入 Go 二进制用，由 Makefile 复制）
-backend/internal/gateway/webdist/
-!backend/internal/gateway/webdist/.gitkeep
+# 先取消忽略目录本身，再忽略目录下所有文件，最后保留占位文件
+!backend/internal/gateway/webdist/
+backend/internal/gateway/webdist/*
+!backend/internal/gateway/webdist/embed_placeholder
 
 # 编译产物
 bin/
