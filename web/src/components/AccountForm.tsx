@@ -198,14 +198,27 @@ export function AccountForm({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* 账号类型选择（编辑模式下只读） */}
       <div>
-        <span style={labelStyle}>账号类型 *</span>
+        <span style={labelStyle}>账号类型 {mode === 'create' ? '*' : ''}</span>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-          <div style={accountType === 'apikey' ? cardActiveStyle : cardStyle} onClick={() => handleTypeChange('apikey')}>
+          <div
+            style={{
+              ...(accountType === 'apikey' ? cardActiveStyle : cardStyle),
+              ...(mode === 'edit' && accountType !== 'apikey' ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+            }}
+            onClick={mode === 'create' ? () => handleTypeChange('apikey') : undefined}
+          >
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: cssVar('text') }}>API Key</div>
             <div style={descStyle}>支持所有 Responses 标准接口</div>
           </div>
-          <div style={accountType === 'oauth' ? cardActiveStyle : cardStyle} onClick={() => handleTypeChange('oauth')}>
+          <div
+            style={{
+              ...(accountType === 'oauth' ? cardActiveStyle : cardStyle),
+              ...(mode === 'edit' && accountType !== 'oauth' ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+            }}
+            onClick={mode === 'create' ? () => handleTypeChange('oauth') : undefined}
+          >
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: cssVar('text') }}>OAuth 登录</div>
             <div style={descStyle}>通过浏览器授权登录</div>
           </div>
@@ -379,38 +392,42 @@ export function AccountForm({
             </div>
           )}
 
-          <div>
-            <label style={labelStyle}>
-              Access Token {!oauth && <span style={{ color: cssVar('danger') }}>*</span>}
-            </label>
-            <input
-              type="password"
-              style={inputStyle}
-              placeholder={oauth ? '授权后自动填充，或手动输入' : 'eyJhbG...'}
-              value={credentials.access_token ?? ''}
-              onChange={(e) => updateField('access_token', e.target.value)}
-            />
-          </div>
+          {mode === 'create' && (
+            <div>
+              <label style={labelStyle}>
+                Access Token {!oauth && <span style={{ color: cssVar('danger') }}>*</span>}
+              </label>
+              <input
+                type="password"
+                style={inputStyle}
+                placeholder={oauth ? '授权后自动填充，或手动输入' : 'eyJhbG...'}
+                value={credentials.access_token ?? ''}
+                onChange={(e) => updateField('access_token', e.target.value)}
+              />
+            </div>
+          )}
           <div>
             <label style={labelStyle}>Refresh Token</label>
             <input
               type="password"
               style={inputStyle}
-              placeholder="授权后自动填充"
+              placeholder={mode === 'edit' ? '输入新的 Refresh Token 以更新' : '授权后自动填充'}
               value={credentials.refresh_token ?? ''}
               onChange={(e) => updateField('refresh_token', e.target.value)}
             />
           </div>
-          <div>
-            <label style={labelStyle}>ChatGPT Account ID</label>
-            <input
-              type="text"
-              style={inputStyle}
-              placeholder="授权后自动填充"
-              value={credentials.chatgpt_account_id ?? ''}
-              onChange={(e) => updateField('chatgpt_account_id', e.target.value)}
-            />
-          </div>
+          {mode === 'create' && (
+            <div>
+              <label style={labelStyle}>ChatGPT Account ID</label>
+              <input
+                type="text"
+                style={inputStyle}
+                placeholder="授权后自动填充"
+                value={credentials.chatgpt_account_id ?? ''}
+                onChange={(e) => updateField('chatgpt_account_id', e.target.value)}
+              />
+            </div>
+          )}
         </>
       )}
     </div>
