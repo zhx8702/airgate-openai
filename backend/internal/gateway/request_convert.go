@@ -68,6 +68,10 @@ func ensureResponsesDefaults(body []byte) []byte {
 	if modified, err := sjson.SetBytes(result, "store", false); err == nil {
 		result = modified
 	}
+	// ChatGPT codex 端点要求 instructions 字段必须存在
+	if !gjson.GetBytes(result, "instructions").Exists() {
+		result, _ = sjson.SetBytes(result, "instructions", "")
+	}
 	if modified, err := sjson.SetBytes(result, "parallel_tool_calls", true); err == nil {
 		result = modified
 	}

@@ -56,12 +56,6 @@ gateway:
       input_price: 0.125
       output_price: 1
       cache_price: 0.025
-    - id: gpt-5-nano
-      name: GPT 5 Nano
-      max_tokens: 128000
-      input_price: 0.05
-      output_price: 0.4
-      cache_price: 0.005
     - id: gpt-5.1
       name: GPT 5.1
       max_tokens: 400000
@@ -98,11 +92,6 @@ gateway:
       input_price: 1.75
       output_price: 14
       cache_price: 0.175
-    - id: gpt-5.2-pro
-      name: GPT 5.2 Pro
-      max_tokens: 400000
-      input_price: 10.5
-      output_price: 84
     - id: gpt-5.3-codex
       name: GPT 5.3 Codex
       max_tokens: 400000
@@ -121,11 +110,6 @@ gateway:
       input_price: 2.5
       output_price: 15
       cache_price: 0.25
-    - id: gpt-5.4-pro
-      name: GPT 5.4 Pro
-      max_tokens: 1050000
-      input_price: 30
-      output_price: 180
   account_types:
     - key: apikey
       label: API Key

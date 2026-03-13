@@ -248,9 +248,8 @@ func (g *OpenAIGateway) buildAnthropicUpstreamRequest(
 	upstreamReq.Header.Set("Accept", "text/event-stream")
 
 	if isOAuth {
-		// OAuth 模式：手动设置认证头
+		// OAuth 模式：手动设置认证头（SSE 模式不需要 OpenAI-Beta 头）
 		upstreamReq.Header.Set("Authorization", "Bearer "+account.Credentials["access_token"])
-		upstreamReq.Header.Set("OpenAI-Beta", SSEBetaHeader)
 		if aid := account.Credentials["chatgpt_account_id"]; aid != "" {
 			upstreamReq.Header.Set("ChatGPT-Account-ID", aid)
 		}

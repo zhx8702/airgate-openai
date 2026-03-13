@@ -20,10 +20,8 @@ const (
 	ChatGPTWSURL = "wss://chatgpt.com/backend-api/codex/responses"
 	// ChatGPTSSEURL OAuth 账号的 SSE 端点
 	ChatGPTSSEURL = "https://chatgpt.com/backend-api/codex/responses"
-	// WSBetaHeader WebSocket 协议的 OpenAI-Beta 头
-	WSBetaHeader = "responses_websockets=2026-02-04"
-	// SSEBetaHeader SSE 协议的 OpenAI-Beta 头
-	SSEBetaHeader = "responses=experimental"
+	// WSBetaHeader WebSocket 协议的 OpenAI-Beta 头（仅 WS 模式需要）
+	WSBetaHeader = "responses_websockets=2026-02-06"
 )
 
 // WSConfig WebSocket 连接配置

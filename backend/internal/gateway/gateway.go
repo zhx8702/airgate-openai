@@ -9,6 +9,8 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -202,8 +204,6 @@ func (g *OpenAIGateway) probeOAuthUsage(ctx context.Context, accountID int64, cr
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+credentials["access_token"])
-	req.Header.Set("OpenAI-Beta", SSEBetaHeader)
-	req.Header.Set("Originator", "codex_cli_rs")
 	if aid := credentials["chatgpt_account_id"]; aid != "" {
 		req.Header.Set("ChatGPT-Account-ID", aid)
 	}
@@ -247,8 +247,108 @@ func (g *OpenAIGateway) probeOAuthUsage(ctx context.Context, accountID int64, cr
 }
 
 // HandleRequest 处理 Core 透传的自定义请求（实现 sdk.RequestHandler 接口）
-func (g *OpenAIGateway) HandleRequest(_ context.Context, _, path, _ string, _ http.Header, body []byte) (int, http.Header, []byte, error) {
+func (g *OpenAIGateway) HandleRequest(ctx context.Context, _, path, _ string, _ http.Header, body []byte) (int, http.Header, []byte, error) {
 	switch path {
+	case "usage/accounts":
+		var accounts []struct {
+			ID          int64             `json:"id"`
+			Credentials map[string]string `json:"credentials"`
+		}
+		if err := json.Unmarshal(body, &accounts); err != nil {
+			return http.StatusBadRequest, nil, jsonError("invalid request body"), nil
+		}
+
+		// 通用窗口行
+		type usageWindow struct {
+			Label        string  `json:"label"`
+			UsedPercent  float64 `json:"used_percent"`
+			ResetSeconds int     `json:"reset_seconds"`
+		}
+		type creditsInfo struct {
+			Balance   float64 `json:"balance"`
+			Unlimited bool    `json:"unlimited"`
+		}
+		type accountUsage struct {
+			Windows []usageWindow `json:"windows"`
+			Credits *creditsInfo  `json:"credits,omitempty"`
+		}
+
+		windowLabel := func(minutes, defaultMinutes int) string {
+			if minutes <= 0 {
+				minutes = defaultMinutes
+			}
+			if minutes >= 1440 {
+				return fmt.Sprintf("%dd", minutes/1440)
+			}
+			return fmt.Sprintf("%dh", minutes/60)
+		}
+
+		result := make(map[string]*accountUsage)
+		for _, a := range accounts {
+			snapshot := GetCodexUsage(a.ID)
+			if snapshot == nil {
+				snapshot = g.ProbeUsage(ctx, a.ID, a.Credentials)
+			}
+			if snapshot == nil {
+				continue
+			}
+
+			usage := &accountUsage{}
+
+			// Primary 窗口
+			if snapshot.PrimaryUsedPercent > 0 || snapshot.PrimaryWindowMinutes > 0 {
+				usage.Windows = append(usage.Windows, usageWindow{
+					Label:        windowLabel(snapshot.PrimaryWindowMinutes, 300),
+					UsedPercent:  snapshot.PrimaryUsedPercent,
+					ResetSeconds: snapshot.PrimaryResetAfterSeconds,
+				})
+			}
+			// Secondary 窗口
+			if snapshot.SecondaryUsedPercent > 0 || snapshot.SecondaryWindowMinutes > 0 {
+				usage.Windows = append(usage.Windows, usageWindow{
+					Label:        windowLabel(snapshot.SecondaryWindowMinutes, 10080),
+					UsedPercent:  snapshot.SecondaryUsedPercent,
+					ResetSeconds: snapshot.SecondaryResetAfterSeconds,
+				})
+			}
+			// Bengalfox Primary
+			if snapshot.BengalfoxPrimaryUsedPercent > 0 || snapshot.BengalfoxPrimaryWindowMinutes > 0 {
+				name := snapshot.LimitName
+				if name == "" {
+					name = "spark"
+				}
+				usage.Windows = append(usage.Windows, usageWindow{
+					Label:        windowLabel(snapshot.BengalfoxPrimaryWindowMinutes, 300) + " " + name,
+					UsedPercent:  snapshot.BengalfoxPrimaryUsedPercent,
+					ResetSeconds: snapshot.BengalfoxPrimaryResetAfterSeconds,
+				})
+			}
+			// Bengalfox Secondary
+			if snapshot.BengalfoxSecondaryUsedPercent > 0 || snapshot.BengalfoxSecondaryWindowMinutes > 0 {
+				name := snapshot.LimitName
+				if name == "" {
+					name = "spark"
+				}
+				usage.Windows = append(usage.Windows, usageWindow{
+					Label:        windowLabel(snapshot.BengalfoxSecondaryWindowMinutes, 10080) + " " + name,
+					UsedPercent:  snapshot.BengalfoxSecondaryUsedPercent,
+					ResetSeconds: snapshot.BengalfoxSecondaryResetAfterSeconds,
+				})
+			}
+			// Credits
+			if snapshot.CreditsHasCredits {
+				usage.Credits = &creditsInfo{
+					Balance:   snapshot.CreditsBalance,
+					Unlimited: snapshot.CreditsUnlimited,
+				}
+			}
+
+			if len(usage.Windows) > 0 || usage.Credits != nil {
+				result[strconv.FormatInt(a.ID, 10)] = usage
+			}
+		}
+		return http.StatusOK, nil, jsonMarshal(map[string]any{"accounts": result}), nil
+
 	case "oauth/start":
 		resp, err := g.StartOAuth(context.Background(), &OAuthStartRequest{})
 		if err != nil {
@@ -260,11 +360,25 @@ func (g *OpenAIGateway) HandleRequest(_ context.Context, _, path, _ string, _ ht
 		}), nil
 
 	case "oauth/exchange":
-		var req OAuthCallbackRequest
-		if err := json.Unmarshal(body, &req); err != nil {
-			return http.StatusBadRequest, nil, jsonError("请求体解析失败"), nil
+		var raw struct {
+			CallbackURL string `json:"callback_url"`
 		}
-		result, err := g.HandleOAuthCallback(context.Background(), &req)
+		if err := json.Unmarshal(body, &raw); err != nil || raw.CallbackURL == "" {
+			return http.StatusBadRequest, nil, jsonError("缺少 callback_url 参数"), nil
+		}
+		parsed, err := url.Parse(raw.CallbackURL)
+		if err != nil {
+			return http.StatusBadRequest, nil, jsonError("callback_url 格式无效"), nil
+		}
+		code := parsed.Query().Get("code")
+		state := parsed.Query().Get("state")
+		if code == "" || state == "" {
+			return http.StatusBadRequest, nil, jsonError("callback_url 缺少 code 或 state 参数"), nil
+		}
+		result, err := g.HandleOAuthCallback(context.Background(), &OAuthCallbackRequest{
+			Code:  code,
+			State: state,
+		})
 		if err != nil {
 			return http.StatusInternalServerError, nil, jsonError(err.Error()), nil
 		}

@@ -59,9 +59,9 @@ func (s *sseSession) chat(input string) error {
 	req.Header.Set("Authorization", "Bearer "+s.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("OpenAI-Beta", gateway.SSEBetaHeader)
-	req.Header.Set("originator", "codex_cli_rs")
+	// 注意：codex 源码 SSE 模式不设置 OpenAI-Beta 头（仅 WS 模式才需要）
 	req.Header.Set("session_id", s.cacheKey)
+	req.Header.Set("x-client-request-id", s.cacheKey)
 	req.Host = "chatgpt.com"
 
 	if s.accountID != "" {
