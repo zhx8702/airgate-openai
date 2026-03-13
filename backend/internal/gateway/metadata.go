@@ -42,9 +42,9 @@ func BuildPluginInfo() sdk.PluginInfo {
 				Label:       "OAuth 登录",
 				Description: "通过浏览器授权登录 ChatGPT 账号",
 				Fields: []sdk.CredentialField{
-					{Key: "access_token", Label: "Access Token", Type: "password", Required: false, Placeholder: "授权后自动填充"},
+					{Key: "access_token", Label: "Access Token", Type: "password", Required: false, Placeholder: "授权后自动填充", EditDisabled: true},
 					{Key: "refresh_token", Label: "Refresh Token", Type: "password", Required: false, Placeholder: "授权后自动填充"},
-					{Key: "chatgpt_account_id", Label: "ChatGPT Account ID", Type: "text", Required: false, Placeholder: "授权后自动填充"},
+					{Key: "chatgpt_account_id", Label: "ChatGPT Account ID", Type: "text", Required: false, Placeholder: "授权后自动填充", EditDisabled: true},
 				},
 			},
 		},
