@@ -2,12 +2,17 @@
 
 GO := GOTOOLCHAIN=local go
 
-.PHONY: help build build-web build-backend ci pre-commit lint fmt test vet clean setup-hooks
+.PHONY: help install build build-web build-backend dev ci pre-commit lint fmt test vet clean setup-hooks
 
 help: ## 显示帮助信息
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 # ===================== 构建 =====================
+
+install: ## 安装前后端依赖
+	cd web && npm install
+	cd backend && $(GO) mod download
+	@echo "依赖安装完成"
 
 build: build-web build-backend ## 完整构建：前端 → 复制 → 后端
 
@@ -21,7 +26,15 @@ build-backend: ## 构建后端（自动复制前端产物）
 
 # ===================== 开发 =====================
 
-dev: ## 启动开发服务器
+dev: ## 启动开发服务器（自动安装依赖、构建前端）
+	@if [ ! -d web/node_modules ]; then \
+		echo "检测到前端依赖未安装，正在安装..."; \
+		cd web && npm install; \
+	fi
+	@if [ ! -d web/dist ]; then \
+		echo "检测到前端未构建，正在构建..."; \
+		cd web && npm run build; \
+	fi
 	cd backend && $(GO) run ./cmd/devserver
 
 # ===================== 质量检查 =====================
