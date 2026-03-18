@@ -31,6 +31,21 @@ gateway:
     - method: WS
       path: /v1/responses
       description: Responses API（WebSocket）
+    - method: POST
+      path: /responses
+      description: Responses API（无 /v1 前缀）
+    - method: POST
+      path: /chat/completions
+      description: Chat Completions API（无 /v1 前缀）
+    - method: POST
+      path: /messages
+      description: Anthropic Messages API（无 /v1 前缀）
+    - method: GET
+      path: /models
+      description: 模型列表（无 /v1 前缀）
+    - method: WS
+      path: /responses
+      description: Responses API WebSocket（无 /v1 前缀）
   models:
     - id: gpt-5
       name: GPT 5
