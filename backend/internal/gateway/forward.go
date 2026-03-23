@@ -91,12 +91,20 @@ func (g *OpenAIGateway) forwardAPIKey(ctx context.Context, req *sdk.ForwardReque
 	// 上游返回错误时，返回 error 让核心决定是否 failover
 	if resp.StatusCode >= 500 || resp.StatusCode == 429 || resp.StatusCode == 401 || resp.StatusCode == 403 {
 		respBody, _ := io.ReadAll(resp.Body)
+		// 优先提取 JSON error.message，回退到截断的原始响应
+		errDetail := ""
+		if msg := gjson.GetBytes(respBody, "error.message").String(); msg != "" {
+			errDetail = msg
+		} else {
+			errDetail = truncate(string(respBody), 200)
+		}
 		return &sdk.ForwardResult{
 			StatusCode:    resp.StatusCode,
 			Duration:      time.Since(start),
 			AccountStatus: accountStatusFromCode(resp.StatusCode),
+			ErrorMessage:  errDetail,
 			RetryAfter:    extractRetryAfterHeader(resp.Header),
-		}, fmt.Errorf("上游返回 %d: %s", resp.StatusCode, truncate(string(respBody), 200))
+		}, fmt.Errorf("上游返回 %d: %s", resp.StatusCode, errDetail)
 	}
 
 	// /v1/models 路径补齐上下文元信息（不影响其它路由）
@@ -195,8 +203,17 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 		TurnState:  req.Headers.Get("x-codex-turn-state"),
 		Originator: req.Headers.Get("originator"),
 	}
-	conn, _, err := DialWebSocket(cfg)
+	conn, wsResp, err := DialWebSocket(cfg)
 	if err != nil {
+		// WS 握手失败时，根据 HTTP 状态码设置 AccountStatus，让核心正确处理账号状态
+		if wsResp != nil && (wsResp.StatusCode == 401 || wsResp.StatusCode == 403) {
+			return &sdk.ForwardResult{
+				StatusCode:    wsResp.StatusCode,
+				Duration:      time.Since(start),
+				AccountStatus: accountStatusFromCode(wsResp.StatusCode),
+				ErrorMessage:  err.Error(),
+			}, err
+		}
 		return nil, err
 	}
 	defer func() {
@@ -239,12 +256,14 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 	}
 
 	fwdResult := &sdk.ForwardResult{
-		StatusCode:   http.StatusOK,
-		InputTokens:  result.InputTokens,
-		OutputTokens: result.OutputTokens,
-		CacheTokens:  result.CacheTokens,
-		Model:        result.Model,
-		Duration:     time.Since(start),
+		StatusCode:            http.StatusOK,
+		InputTokens:           result.InputTokens,
+		OutputTokens:          result.OutputTokens,
+		CachedInputTokens:     result.CachedInputTokens,
+		ReasoningOutputTokens: result.ReasoningOutputTokens,
+		ServiceTier:           normalizeOpenAIServiceTier(gjson.GetBytes(createMsg, "service_tier").String()),
+		Model:                 result.Model,
+		Duration:              time.Since(start),
 	}
 	if result.Err != nil {
 		fwdResult.StatusCode = http.StatusBadGateway

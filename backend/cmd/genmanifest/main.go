@@ -44,12 +44,12 @@ type routeDef struct {
 }
 
 type modelInfo struct {
-	ID          string  `yaml:"id"`
-	Name        string  `yaml:"name"`
-	MaxTokens   int     `yaml:"max_tokens"`
-	InputPrice  float64 `yaml:"input_price"`
-	OutputPrice float64 `yaml:"output_price"`
-	CachePrice  float64 `yaml:"cache_price,omitempty"`
+	ID               string  `yaml:"id"`
+	Name             string  `yaml:"name"`
+	MaxTokens        int     `yaml:"max_tokens"`
+	InputPrice       float64 `yaml:"input_price"`
+	OutputPrice      float64 `yaml:"output_price"`
+	CachedInputPrice float64 `yaml:"cached_input_price,omitempty"`
 }
 
 type accountType struct {
@@ -165,12 +165,12 @@ func convertModels(models []sdk.ModelInfo) []modelInfo {
 	items := make([]modelInfo, 0, len(models))
 	for _, model := range models {
 		items = append(items, modelInfo{
-			ID:          model.ID,
-			Name:        model.Name,
-			MaxTokens:   model.MaxTokens,
-			InputPrice:  model.InputPrice,
-			OutputPrice: model.OutputPrice,
-			CachePrice:  model.CachePrice,
+			ID:               model.ID,
+			Name:             model.Name,
+			MaxTokens:        model.MaxTokens,
+			InputPrice:       model.InputPrice,
+			OutputPrice:      model.OutputPrice,
+			CachedInputPrice: model.CachedInputPrice,
 		})
 	}
 	return items

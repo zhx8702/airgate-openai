@@ -11,6 +11,12 @@ import (
 	sdk "github.com/DouDOU-start/airgate-sdk"
 )
 
+// wsDialResult 封装 DialWebSocket 的认证失败信息
+type wsDialResult struct {
+	statusCode   int
+	errorMessage string
+}
+
 // HandleWebSocket 处理入站 WebSocket 连接（实现 sdk.GatewayPlugin）
 // 流程：客户端 WS <-> gRPC 双向流 <-> 插件 <-> 上游 WS
 func (g *OpenAIGateway) HandleWebSocket(ctx context.Context, conn sdk.WebSocketConn) (*sdk.ForwardResult, error) {
@@ -24,10 +30,11 @@ func (g *OpenAIGateway) HandleWebSocket(ctx context.Context, conn sdk.WebSocketC
 
 	// 根据凭证类型选择上游连接方式
 	var err error
+	var dialInfo *wsDialResult
 	if account.Credentials["access_token"] != "" {
-		err = g.handleWSWithOAuth(ctx, conn, account)
+		dialInfo, err = g.handleWSWithOAuth(ctx, conn, account)
 	} else if account.Credentials["api_key"] != "" {
-		err = g.handleWSWithAPIKey(ctx, conn, account)
+		dialInfo, err = g.handleWSWithAPIKey(ctx, conn, account)
 	} else {
 		return nil, fmt.Errorf("账号缺少 api_key 或 access_token")
 	}
@@ -38,20 +45,30 @@ func (g *OpenAIGateway) HandleWebSocket(ctx context.Context, conn sdk.WebSocketC
 	}
 	if err != nil {
 		result.StatusCode = http.StatusBadGateway
+		// 如果是认证失败，设置 AccountStatus 让核心正确处理
+		if dialInfo != nil && (dialInfo.statusCode == 401 || dialInfo.statusCode == 403) {
+			result.StatusCode = dialInfo.statusCode
+			result.AccountStatus = accountStatusFromCode(dialInfo.statusCode)
+			result.ErrorMessage = dialInfo.errorMessage
+		}
 	}
 	return result, err
 }
 
 // handleWSWithOAuth 使用上游 WebSocket 直通（端到端 WS 桥接）
-func (g *OpenAIGateway) handleWSWithOAuth(ctx context.Context, clientConn sdk.WebSocketConn, account *sdk.Account) error {
+func (g *OpenAIGateway) handleWSWithOAuth(ctx context.Context, clientConn sdk.WebSocketConn, account *sdk.Account) (*wsDialResult, error) {
 	cfg := WSConfig{
 		Token:     account.Credentials["access_token"],
 		AccountID: account.Credentials["chatgpt_account_id"],
 		ProxyURL:  account.ProxyURL,
 	}
-	upstreamConn, _, err := DialWebSocket(cfg)
+	upstreamConn, wsResp, err := DialWebSocket(cfg)
 	if err != nil {
-		return fmt.Errorf("连接上游 WebSocket 失败: %w", err)
+		var info *wsDialResult
+		if wsResp != nil {
+			info = &wsDialResult{statusCode: wsResp.StatusCode, errorMessage: err.Error()}
+		}
+		return info, fmt.Errorf("连接上游 WebSocket 失败: %w", err)
 	}
 	defer func() {
 		_ = upstreamConn.Close()
@@ -59,18 +76,22 @@ func (g *OpenAIGateway) handleWSWithOAuth(ctx context.Context, clientConn sdk.We
 
 	g.logger.Info("上游 WebSocket 连接已建立", "account_id", account.ID)
 
-	return bridgeWebSocket(ctx, clientConn, upstreamConn)
+	return nil, bridgeWebSocket(ctx, clientConn, upstreamConn)
 }
 
 // handleWSWithAPIKey API Key 模式下的 WS 桥接
-func (g *OpenAIGateway) handleWSWithAPIKey(ctx context.Context, clientConn sdk.WebSocketConn, account *sdk.Account) error {
+func (g *OpenAIGateway) handleWSWithAPIKey(ctx context.Context, clientConn sdk.WebSocketConn, account *sdk.Account) (*wsDialResult, error) {
 	cfg := WSConfig{
 		Token:    account.Credentials["api_key"],
 		ProxyURL: account.ProxyURL,
 	}
-	upstreamConn, _, err := DialWebSocket(cfg)
+	upstreamConn, wsResp, err := DialWebSocket(cfg)
 	if err != nil {
-		return fmt.Errorf("连接上游 WebSocket 失败: %w", err)
+		var info *wsDialResult
+		if wsResp != nil {
+			info = &wsDialResult{statusCode: wsResp.StatusCode, errorMessage: err.Error()}
+		}
+		return info, fmt.Errorf("连接上游 WebSocket 失败: %w", err)
 	}
 	defer func() {
 		_ = upstreamConn.Close()
@@ -78,7 +99,7 @@ func (g *OpenAIGateway) handleWSWithAPIKey(ctx context.Context, clientConn sdk.W
 
 	g.logger.Info("上游 WebSocket 连接已建立（API Key）", "account_id", account.ID)
 
-	return bridgeWebSocket(ctx, clientConn, upstreamConn)
+	return nil, bridgeWebSocket(ctx, clientConn, upstreamConn)
 }
 
 // bridgeWebSocket 双向桥接客户端和上游的 WebSocket 消息

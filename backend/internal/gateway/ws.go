@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -36,18 +38,19 @@ type WSConfig struct {
 
 // WSResult 事件解析结果
 type WSResult struct {
-	Text              string
-	Reasoning         string
-	StopReason        string
-	ToolUses          []ToolUseBlock
-	ResponseID        string
-	Model             string
-	InputTokens       int
-	OutputTokens      int
-	CacheTokens       int
-	CompletedEventRaw []byte
-	Duration          time.Duration
-	Err               error
+	Text                  string
+	Reasoning             string
+	StopReason            string
+	ToolUses              []ToolUseBlock
+	ResponseID            string
+	Model                 string
+	InputTokens           int
+	OutputTokens          int
+	CachedInputTokens     int
+	ReasoningOutputTokens int
+	CompletedEventRaw     []byte
+	Duration              time.Duration
+	Err                   error
 }
 
 // ToolUseBlock 表示从 Responses 流中聚合出的工具调用块。
@@ -103,6 +106,36 @@ func DialWebSocket(cfg WSConfig) (*websocket.Conn, *http.Response, error) {
 	conn, resp, err := dialer.Dial(ChatGPTWSURL, headers)
 	if err != nil {
 		if resp != nil {
+			// 尝试读取上游响应体中的错误详情
+			upstreamMsg := ""
+			if resp.Body != nil {
+				if body, readErr := io.ReadAll(resp.Body); readErr == nil && len(body) > 0 {
+					// 尝试提取 JSON 中的 error.message
+					if msg := gjson.GetBytes(body, "error.message").String(); msg != "" {
+						upstreamMsg = msg
+					} else {
+						upstreamMsg = truncate(string(body), 200)
+					}
+				}
+			}
+			hint := ""
+			switch resp.StatusCode {
+			case 401:
+				hint = "认证失败，access_token 已过期或账号已被停用"
+			case 403:
+				hint = "访问被拒绝，账号可能已被禁用或无权限"
+			case 429:
+				hint = "请求过于频繁，请稍后重试"
+			}
+			if hint != "" {
+				if upstreamMsg != "" {
+					return nil, resp, fmt.Errorf("%s: %s (HTTP %d)", hint, upstreamMsg, resp.StatusCode)
+				}
+				return nil, resp, fmt.Errorf("%s (HTTP %d)", hint, resp.StatusCode)
+			}
+			if upstreamMsg != "" {
+				return nil, resp, fmt.Errorf("WebSocket 握手失败: %s (HTTP %d)", upstreamMsg, resp.StatusCode)
+			}
 			return nil, resp, fmt.Errorf("WebSocket 握手失败 (HTTP %d): %w", resp.StatusCode, err)
 		}
 		return nil, nil, fmt.Errorf("WebSocket 连接失败: %w", err)
@@ -355,12 +388,20 @@ func JsonInt(m map[string]any, key string) int {
 }
 
 // extractUsageFromResponseMap 从 Responses API response 对象中提取 usage 到 WSResult
+// cached_tokens 从 input_tokens 中扣除，与 Codex 行为一致
 func extractUsageFromResponseMap(result *WSResult, resp map[string]any) {
 	if usage, ok := resp["usage"].(map[string]any); ok {
 		result.InputTokens = JsonInt(usage, "input_tokens")
 		result.OutputTokens = JsonInt(usage, "output_tokens")
 		if details, ok := usage["input_tokens_details"].(map[string]any); ok {
-			result.CacheTokens = JsonInt(details, "cached_tokens")
+			result.CachedInputTokens = JsonInt(details, "cached_tokens")
+		}
+		if details, ok := usage["output_tokens_details"].(map[string]any); ok {
+			result.ReasoningOutputTokens = JsonInt(details, "reasoning_tokens")
+		}
+		// 从 input_tokens 中扣除缓存部分，避免计费重复计算
+		if result.CachedInputTokens > 0 && result.InputTokens >= result.CachedInputTokens {
+			result.InputTokens -= result.CachedInputTokens
 		}
 	}
 }

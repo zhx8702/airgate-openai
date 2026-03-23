@@ -27,29 +27,29 @@ type Spec struct {
 // 字段顺序：Name, ContextWindow, MaxOutputTokens, InputPrice, CachedPrice, OutputPrice
 var registry = map[string]Spec{
 	// ── GPT-5.4 ──
-	"gpt-5.4": {"GPT 5.4", 1050000, 128000, 2.5, 0.25, 15.0},
+	"gpt-5.4": {"GPT 5.4", 272000, 128000, 2.5, 0.25, 15.0},
 
 	// ── Codex 5.x ──
-	"gpt-5.3-codex":       {"GPT 5.3 Codex", 400000, 128000, 1.75, 0.175, 14.0},
+	"gpt-5.3-codex":       {"GPT 5.3 Codex", 272000, 128000, 1.75, 0.175, 14.0},
 	"gpt-5.3-codex-spark": {"GPT 5.3 Codex Spark", 128000, 128000, 1.75, 0.175, 14.0},
-	"gpt-5.2-codex":       {"GPT 5.2 Codex", 400000, 128000, 1.75, 0.175, 14.0},
-	"gpt-5.1-codex":       {"GPT 5.1 Codex", 400000, 128000, 1.25, 0.125, 10.0},
-	"gpt-5.1-codex-max":   {"GPT 5.1 Codex Max", 400000, 128000, 1.25, 0.125, 10.0},
-	"gpt-5.1-codex-mini":  {"GPT 5.1 Codex Mini", 400000, 128000, 0.25, 0.025, 2.0},
-	"gpt-5-codex":         {"GPT 5 Codex", 400000, 128000, 1.25, 0.125, 10.0},
-	"gpt-5-codex-mini":    {"GPT 5 Codex Mini", 400000, 128000, 0.25, 0.025, 2.0},
+	"gpt-5.2-codex":       {"GPT 5.2 Codex", 272000, 128000, 1.75, 0.175, 14.0},
+	"gpt-5.1-codex":       {"GPT 5.1 Codex", 272000, 128000, 1.25, 0.125, 10.0},
+	"gpt-5.1-codex-max":   {"GPT 5.1 Codex Max", 272000, 128000, 1.25, 0.125, 10.0},
+	"gpt-5.1-codex-mini":  {"GPT 5.1 Codex Mini", 128000, 128000, 0.25, 0.025, 2.0},
+	"gpt-5-codex":         {"GPT 5 Codex", 272000, 128000, 1.25, 0.125, 10.0},
+	"gpt-5-codex-mini":    {"GPT 5 Codex Mini", 128000, 128000, 0.25, 0.025, 2.0},
 
 	// ── GPT 基础系列 ──
-	"gpt-5":      {"GPT 5", 400000, 128000, 1.25, 0.125, 10.0},
-	"gpt-5.1":    {"GPT 5.1", 400000, 128000, 1.25, 0.125, 10.0},
-	"gpt-5.2":    {"GPT 5.2", 400000, 128000, 1.75, 0.175, 14.0},
+	"gpt-5":      {"GPT 5", 272000, 128000, 1.25, 0.125, 10.0},
+	"gpt-5.1":    {"GPT 5.1", 272000, 128000, 1.25, 0.125, 10.0},
+	"gpt-5.2":    {"GPT 5.2", 272000, 128000, 1.75, 0.175, 14.0},
 	"gpt-5-mini": {"GPT 5 Mini", 128000, 16384, 0.125, 0.025, 1.0},
 }
 
 // DefaultSpec 未注册模型的兜底值
 var DefaultSpec = Spec{
 	Name:            "Unknown",
-	ContextWindow:   200000,
+	ContextWindow:   272000,
 	MaxOutputTokens: 128000,
 }
 
@@ -67,12 +67,12 @@ func AllSpecs() []sdk.ModelInfo {
 	models := make([]sdk.ModelInfo, 0, len(registry))
 	for id, spec := range registry {
 		models = append(models, sdk.ModelInfo{
-			ID:          id,
-			Name:        spec.Name,
-			MaxTokens:   spec.ContextWindow,
-			InputPrice:  spec.InputPrice,
-			OutputPrice: spec.OutputPrice,
-			CachePrice:  spec.CachedPrice,
+			ID:               id,
+			Name:             spec.Name,
+			MaxTokens:        spec.ContextWindow,
+			InputPrice:       spec.InputPrice,
+			OutputPrice:      spec.OutputPrice,
+			CachedInputPrice: spec.CachedPrice,
 		})
 	}
 	sort.Slice(models, func(i, j int) bool {

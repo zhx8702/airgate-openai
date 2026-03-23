@@ -8,11 +8,26 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+func normalizeOpenAIServiceTier(tier string) string {
+	switch strings.ToLower(strings.TrimSpace(tier)) {
+	case "fast", "priority":
+		return "priority"
+	case "flex":
+		return "flex"
+	default:
+		return ""
+	}
+}
+
 // wrapAsResponsesAPI 将请求包装为 Responses API 格式（模拟客户端模式）
 func wrapAsResponsesAPI(body []byte, model string) ([]byte, error) {
+	return wrapAsResponsesAPIWithTier(body, model, "")
+}
+
+func wrapAsResponsesAPIWithTier(body []byte, model string, reqServiceTierOverride string) ([]byte, error) {
 	// 已是 Responses 格式（有 input 字段），直接补齐默认字段
 	if gjson.GetBytes(body, "input").Exists() {
-		return ensureResponsesDefaults(body), nil
+		return ensureResponsesDefaultsWithTier(body, reqServiceTierOverride), nil
 	}
 
 	// Chat Completions 格式（有 messages 字段）→ 转换为 Responses API input
@@ -52,15 +67,14 @@ func wrapAsResponsesAPI(body []byte, model string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		return ensureResponsesDefaults(out), nil
+		return ensureResponsesDefaultsWithTier(out, reqServiceTierOverride), nil
 	}
 
 	// 无法识别的格式，原样返回
-	return ensureResponsesDefaults(body), nil
+	return ensureResponsesDefaultsWithTier(body, reqServiceTierOverride), nil
 }
 
-// ensureResponsesDefaults 统一补齐 Responses API 请求默认字段，贴近 cliproxy 的 codex 请求策略
-func ensureResponsesDefaults(body []byte) []byte {
+func ensureResponsesDefaultsWithTier(body []byte, reqServiceTierOverride string) []byte {
 	result := body
 	if modified, err := sjson.SetBytes(result, "stream", true); err == nil {
 		result = modified
@@ -93,9 +107,13 @@ func ensureResponsesDefaults(body []byte) []byte {
 		result = modified
 	}
 
-	// 注入 Codex CLI 优化参数（对齐 anthropic_convert.go 的处理）
-	if !gjson.GetBytes(result, "service_tier").Exists() {
-		result, _ = sjson.SetBytes(result, "service_tier", "priority")
+	// 仅在请求或分组明确指定时才传 service_tier
+	if tier := normalizeOpenAIServiceTier(gjson.GetBytes(result, "service_tier").String()); tier != "" {
+		result, _ = sjson.SetBytes(result, "service_tier", tier)
+	} else if tier := normalizeOpenAIServiceTier(reqServiceTierOverride); tier != "" {
+		result, _ = sjson.SetBytes(result, "service_tier", tier)
+	} else if gjson.GetBytes(result, "service_tier").Exists() {
+		result, _ = sjson.DeleteBytes(result, "service_tier")
 	}
 	if !gjson.GetBytes(result, "text.verbosity").Exists() {
 		result, _ = sjson.SetBytes(result, "text.verbosity", "medium")

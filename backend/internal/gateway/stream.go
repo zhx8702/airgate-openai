@@ -93,12 +93,13 @@ func handleNonStreamResponse(resp *http.Response, w http.ResponseWriter, start t
 	}
 
 	return &sdk.ForwardResult{
-		StatusCode:   resp.StatusCode,
-		InputTokens:  usage.inputTokens,
-		OutputTokens: usage.outputTokens,
-		CacheTokens:  usage.cacheTokens,
-		Model:        gjson.GetBytes(body, "model").String(),
-		Duration:     time.Since(start),
+		StatusCode:            resp.StatusCode,
+		InputTokens:           usage.inputTokens,
+		OutputTokens:          usage.outputTokens,
+		CachedInputTokens:     usage.cacheTokens,
+		ReasoningOutputTokens: usage.reasoningOutputTokens,
+		Model:                 gjson.GetBytes(body, "model").String(),
+		Duration:              time.Since(start),
 	}, nil
 }
 
@@ -244,7 +245,12 @@ func parseSSEUsage(data []byte, result *sdk.ForwardResult) {
 		if usage.Exists() {
 			result.InputTokens = int(usage.Get("input_tokens").Int())
 			result.OutputTokens = int(usage.Get("output_tokens").Int())
-			result.CacheTokens = int(usage.Get("input_tokens_details.cached_tokens").Int())
+			result.CachedInputTokens = int(usage.Get("input_tokens_details.cached_tokens").Int())
+			result.ReasoningOutputTokens = int(usage.Get("output_tokens_details.reasoning_tokens").Int())
+			// 从 input_tokens 中扣除缓存部分，避免计费重复计算
+			if result.CachedInputTokens > 0 && result.InputTokens >= result.CachedInputTokens {
+				result.InputTokens -= result.CachedInputTokens
+			}
 		}
 
 	default:
@@ -255,7 +261,12 @@ func parseSSEUsage(data []byte, result *sdk.ForwardResult) {
 		result.InputTokens = int(usage.Get("prompt_tokens").Int())
 		result.OutputTokens = int(usage.Get("completion_tokens").Int())
 		result.Model = gjson.GetBytes(data, "model").String()
-		result.CacheTokens = int(usage.Get("prompt_tokens_details.cached_tokens").Int())
+		result.CachedInputTokens = int(usage.Get("prompt_tokens_details.cached_tokens").Int())
+		result.ReasoningOutputTokens = int(usage.Get("completion_tokens_details.reasoning_tokens").Int())
+		// 从 prompt_tokens 中扣除缓存部分，避免计费重复计算
+		if result.CachedInputTokens > 0 && result.InputTokens >= result.CachedInputTokens {
+			result.InputTokens -= result.CachedInputTokens
+		}
 	}
 }
 
@@ -305,9 +316,10 @@ func parseSSEFailureEvent(data []byte) error {
 
 // openaiUsage 非流式响应的 usage 解析结果
 type openaiUsage struct {
-	inputTokens  int
-	outputTokens int
-	cacheTokens  int
+	inputTokens           int
+	outputTokens          int
+	cacheTokens           int
+	reasoningOutputTokens int
 }
 
 // parseUsage 从完整响应体解析 usage
@@ -328,7 +340,8 @@ func parseUsage(body []byte) openaiUsage {
 		usage.outputTokens = int(usageNode.Get("completion_tokens").Int())
 	}
 
-	cacheCreation := int(usageNode.Get("cache_creation_input_tokens").Int())
+	// 仅提取 cache read（缓存命中）token，不含 cache creation
+	// cache_creation 按正常输入价计费，已包含在 input_tokens 中无需额外处理
 	cacheRead := int(usageNode.Get("cache_read_input_tokens").Int())
 	if cacheRead == 0 {
 		cacheRead = int(usageNode.Get("input_tokens_details.cached_tokens").Int())
@@ -336,7 +349,18 @@ func parseUsage(body []byte) openaiUsage {
 	if cacheRead == 0 {
 		cacheRead = int(usageNode.Get("prompt_tokens_details.cached_tokens").Int())
 	}
-	usage.cacheTokens = cacheCreation + cacheRead
+	usage.cacheTokens = cacheRead
+
+	// 从 input_tokens 中扣除缓存部分，避免计费器重复计算
+	if cacheRead > 0 && usage.inputTokens >= cacheRead {
+		usage.inputTokens -= cacheRead
+	}
+
+	// 提取推理 token（o1/o3 等模型）
+	usage.reasoningOutputTokens = int(usageNode.Get("output_tokens_details.reasoning_tokens").Int())
+	if usage.reasoningOutputTokens == 0 {
+		usage.reasoningOutputTokens = int(usageNode.Get("completion_tokens_details.reasoning_tokens").Int())
+	}
 
 	return usage
 }

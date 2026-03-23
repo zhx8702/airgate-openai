@@ -97,7 +97,7 @@ func (s *sseSession) chat(input string) error {
 		s.history = append(s.history, buildAssistantMsg(result.Text))
 	}
 
-	printStats(result.Model, result.InputTokens, result.OutputTokens, result.CacheTokens, result.Duration)
+	printStats(result.Model, result.InputTokens, result.OutputTokens, result.CachedInputTokens, result.Duration)
 
 	return result.Err
 }
@@ -206,7 +206,7 @@ func (s *wsSession) chat(input string) error {
 		s.previousResponseID = result.ResponseID
 	}
 
-	printStats(result.Model, result.InputTokens, result.OutputTokens, result.CacheTokens, result.Duration)
+	printStats(result.Model, result.InputTokens, result.OutputTokens, result.CachedInputTokens, result.Duration)
 
 	return result.Err
 }

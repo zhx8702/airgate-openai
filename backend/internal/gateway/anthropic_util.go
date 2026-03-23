@@ -189,13 +189,15 @@ func normalizeToolParametersJSON(raw string) string {
 }
 
 // extractResponsesUsage 从 Responses usage 中提取 token 统计（cached_tokens 从 input_tokens 扣除）
-func extractResponsesUsage(usage gjson.Result) (int64, int64, int64) {
+// 返回: inputTokens（不含缓存）, outputTokens, cachedTokens, reasoningTokens
+func extractResponsesUsage(usage gjson.Result) (int64, int64, int64, int64) {
 	if !usage.Exists() || usage.Type == gjson.Null {
-		return 0, 0, 0
+		return 0, 0, 0, 0
 	}
 	inputTokens := usage.Get("input_tokens").Int()
 	outputTokens := usage.Get("output_tokens").Int()
 	cachedTokens := usage.Get("input_tokens_details.cached_tokens").Int()
+	reasoningTokens := usage.Get("output_tokens_details.reasoning_tokens").Int()
 	if cachedTokens > 0 {
 		if inputTokens >= cachedTokens {
 			inputTokens -= cachedTokens
@@ -203,7 +205,7 @@ func extractResponsesUsage(usage gjson.Result) (int64, int64, int64) {
 			inputTokens = 0
 		}
 	}
-	return inputTokens, outputTokens, cachedTokens
+	return inputTokens, outputTokens, cachedTokens, reasoningTokens
 }
 
 // ──────────────────────────────────────────────────────

@@ -85,6 +85,9 @@ func (g *OpenAIGateway) forwardAnthropicMessage(ctx context.Context, req *sdk.Fo
 	// 注: Anthropic 的 cache_control 在转换为 Responses API 后不再适用，
 	// Responses API 使用 session_id + include 机制实现缓存，无需预处理断点
 	responsesBody := convertAnthropicRequestToResponses(body, modelName, mappingEffort)
+	if tier := normalizeOpenAIServiceTier(req.Headers.Get("X-Airgate-Service-Tier")); tier != "" {
+		responsesBody, _ = sjson.SetBytes(responsesBody, "service_tier", tier)
+	}
 
 	// 5. 按需注入 web_search 工具
 	if hasWebSearchTool(body) {
@@ -303,12 +306,14 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 	}
 
 	return &sdk.ForwardResult{
-		StatusCode:   http.StatusOK,
-		Model:        billingModel,
-		InputTokens:  wsResult.InputTokens,
-		OutputTokens: wsResult.OutputTokens,
-		CacheTokens:  wsResult.CacheTokens,
-		Duration:     time.Since(start),
+		StatusCode:            http.StatusOK,
+		Model:                 billingModel,
+		InputTokens:           wsResult.InputTokens,
+		OutputTokens:          wsResult.OutputTokens,
+		CachedInputTokens:     wsResult.CachedInputTokens,
+		ReasoningOutputTokens: wsResult.ReasoningOutputTokens,
+		ServiceTier:           "priority",
+		Duration:              time.Since(start),
 	}, nil
 }
 

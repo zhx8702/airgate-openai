@@ -27,7 +27,8 @@ type anthropicStreamState struct {
 	HasReceivedArgumentsDelta bool
 	InputTokens               int
 	OutputTokens              int
-	CacheTokens               int
+	CachedInputTokens         int
+	ReasoningOutputTokens     int
 	reverseNameMap            map[string]string // 缓存 short→original 工具名映射，避免每次事件重建
 }
 
@@ -157,10 +158,11 @@ func convertResponsesEventToAnthropic(rawLine []byte, originalRequest []byte, st
 
 	case "response.completed", "response.done":
 		// 提取 usage
-		inputTokens, outputTokens, cachedTokens := extractResponsesUsage(root.Get("response.usage"))
+		inputTokens, outputTokens, cachedTokens, reasoningTokens := extractResponsesUsage(root.Get("response.usage"))
 		state.InputTokens = int(inputTokens)
 		state.OutputTokens = int(outputTokens)
-		state.CacheTokens = int(cachedTokens)
+		state.CachedInputTokens = int(cachedTokens)
+		state.ReasoningOutputTokens = int(reasoningTokens)
 
 		// 构建 message_delta
 		template := `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":0,"output_tokens":0}}`
@@ -267,7 +269,7 @@ func convertResponsesCompletedToAnthropicJSON(completedJSON, originalRequest []b
 	// 始终使用原始 Claude 模型名，让 Claude Code 正确识别模型能力
 	out, _ = sjson.Set(out, "model", model)
 
-	inputTokens, outputTokens, cachedTokens := extractResponsesUsage(responseData.Get("usage"))
+	inputTokens, outputTokens, cachedTokens, _ := extractResponsesUsage(responseData.Get("usage"))
 	out, _ = sjson.Set(out, "usage.input_tokens", inputTokens)
 	out, _ = sjson.Set(out, "usage.output_tokens", outputTokens)
 	if cachedTokens > 0 {
@@ -467,12 +469,13 @@ done:
 	}
 
 	result := &sdk.ForwardResult{
-		StatusCode:   http.StatusOK,
-		InputTokens:  state.InputTokens,
-		OutputTokens: state.OutputTokens,
-		CacheTokens:  state.CacheTokens,
-		Model:        billingModel,
-		Duration:     time.Since(start),
+		StatusCode:            http.StatusOK,
+		InputTokens:           state.InputTokens,
+		OutputTokens:          state.OutputTokens,
+		CachedInputTokens:     state.CachedInputTokens,
+		ReasoningOutputTokens: state.ReasoningOutputTokens,
+		Model:                 billingModel,
+		Duration:              time.Since(start),
 	}
 	if streamErr != nil {
 		result.StatusCode = http.StatusBadGateway
