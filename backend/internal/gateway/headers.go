@@ -226,6 +226,23 @@ func GetCodexUsage(accountID int64) *CodexUsageSnapshot {
 	return val.(*CodexUsageSnapshot)
 }
 
+// probeErrorStore 存储探测过程中发现的凭证错误（accountID → error message）
+var probeErrorStore sync.Map
+
+// StoreProbeError 记录探测时发现的凭证错误
+func StoreProbeError(accountID int64, errMsg string) {
+	probeErrorStore.Store(accountID, errMsg)
+}
+
+// GetProbeError 获取并清除探测错误（一次性消费）
+func GetProbeError(accountID int64) string {
+	val, ok := probeErrorStore.LoadAndDelete(accountID)
+	if !ok {
+		return ""
+	}
+	return val.(string)
+}
+
 // isCodexCLI 检测请求是否来自 Codex CLI
 func isCodexCLI(headers http.Header) bool {
 	ua := strings.ToLower(headers.Get("User-Agent"))

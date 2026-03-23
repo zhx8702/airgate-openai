@@ -187,6 +187,13 @@ func (g *OpenAIGateway) probeAPIKeyUsage(ctx context.Context, accountID int64, c
 	if snapshot != nil {
 		StoreCodexUsage(accountID, snapshot)
 	}
+	// 401/403 标记为凭证错误
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+		log.Printf("[ProbeUsage] API Key 账号 %d: %s", accountID, errMsg)
+		StoreProbeError(accountID, errMsg)
+	}
 	return snapshot
 }
 
@@ -227,6 +234,11 @@ func (g *OpenAIGateway) probeOAuthUsage(ctx context.Context, accountID int64, cr
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		log.Printf("[ProbeUsage] OAuth 账号 %d: HTTP %d, body=%s", accountID, resp.StatusCode, truncate(string(body), 200))
+		// 401/403 标记为凭证错误，存入 probe error 缓存供 HandleRequest 查询
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+			StoreProbeError(accountID, errMsg)
+		}
 		return GetCodexUsage(accountID)
 	}
 
@@ -286,11 +298,25 @@ func (g *OpenAIGateway) HandleRequest(ctx context.Context, _, path, _ string, _ 
 			return fmt.Sprintf("%dh", minutes/60)
 		}
 
+		type accountError struct {
+			ID      int64  `json:"id"`
+			Message string `json:"message"`
+		}
+
 		result := make(map[string]*accountUsage)
+		var probeErrors []accountError
 		for _, a := range accounts {
+			// 检查是否有探测时发现的凭证错误
+			if errMsg := GetProbeError(a.ID); errMsg != "" {
+				probeErrors = append(probeErrors, accountError{ID: a.ID, Message: errMsg})
+			}
 			snapshot := GetCodexUsage(a.ID)
 			if snapshot == nil {
 				snapshot = g.ProbeUsage(ctx, a.ID, a.Credentials)
+			}
+			// 再次检查（ProbeUsage 刚产生的错误）
+			if errMsg := GetProbeError(a.ID); errMsg != "" {
+				probeErrors = append(probeErrors, accountError{ID: a.ID, Message: errMsg})
 			}
 			if snapshot == nil {
 				continue
@@ -350,7 +376,11 @@ func (g *OpenAIGateway) HandleRequest(ctx context.Context, _, path, _ string, _ 
 				result[strconv.FormatInt(a.ID, 10)] = usage
 			}
 		}
-		return http.StatusOK, nil, jsonMarshal(map[string]any{"accounts": result}), nil
+		resp := map[string]any{"accounts": result}
+		if len(probeErrors) > 0 {
+			resp["errors"] = probeErrors
+		}
+		return http.StatusOK, nil, jsonMarshal(resp), nil
 
 	case "oauth/start":
 		resp, err := g.StartOAuth(context.Background(), &OAuthStartRequest{})
