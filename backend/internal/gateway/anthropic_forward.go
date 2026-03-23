@@ -343,6 +343,7 @@ func (g *OpenAIGateway) writeAnthropicUpstreamError(
 		StatusCode:    statusCode,
 		Duration:      time.Since(start),
 		AccountStatus: accountStatusFromCode(statusCode),
+		ErrorMessage:  errMsg,
 	}
 
 	if statusCode >= 500 || statusCode == 429 {

@@ -190,9 +190,8 @@ func (g *OpenAIGateway) probeAPIKeyUsage(ctx context.Context, accountID int64, c
 	// 401/403 标记为凭证错误
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
-		errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
-		log.Printf("[ProbeUsage] API Key 账号 %d: %s", accountID, errMsg)
-		StoreProbeError(accountID, errMsg)
+		log.Printf("[ProbeUsage] API Key 账号 %d: HTTP %d, body=%s", accountID, resp.StatusCode, truncate(string(body), 200))
+		StoreProbeError(accountID, fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)))
 	}
 	return snapshot
 }
@@ -236,8 +235,7 @@ func (g *OpenAIGateway) probeOAuthUsage(ctx context.Context, accountID int64, cr
 		log.Printf("[ProbeUsage] OAuth 账号 %d: HTTP %d, body=%s", accountID, resp.StatusCode, truncate(string(body), 200))
 		// 401/403 标记为凭证错误，存入 probe error 缓存供 HandleRequest 查询
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
-			StoreProbeError(accountID, errMsg)
+			StoreProbeError(accountID, fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)))
 		}
 		return GetCodexUsage(accountID)
 	}
