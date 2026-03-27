@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -125,6 +126,96 @@ type CodexUsageSnapshot struct {
 	CapturedAt time.Time `json:"captured_at"`
 }
 
+// NormalizedCodexLimits contains normalized 5h/7d limit data for generic rendering.
+type NormalizedCodexLimits struct {
+	Used5hPercent   *float64
+	Reset5hSeconds  *int
+	Window5hMinutes *int
+	Used7dPercent   *float64
+	Reset7dSeconds  *int
+	Window7dMinutes *int
+}
+
+func hasCodexWindowData(usedPercent float64, resetAfterSeconds int, windowMinutes int) bool {
+	return usedPercent > 0 || resetAfterSeconds > 0 || windowMinutes > 0
+}
+
+func codexWindowPointers(usedPercent float64, resetAfterSeconds int, windowMinutes int) (*float64, *int, *int) {
+	if !hasCodexWindowData(usedPercent, resetAfterSeconds, windowMinutes) {
+		return nil, nil, nil
+	}
+	used := usedPercent
+	reset := resetAfterSeconds
+	minutes := windowMinutes
+	return &used, &reset, &minutes
+}
+
+// Normalize converts primary/secondary fields to canonical 5h/7d fields.
+// Strategy matches sub2api:
+//  1. Prefer window_minutes to determine which window is shorter.
+//  2. When window_minutes are missing, fall back to legacy assumption:
+//     primary=7d, secondary=5h.
+func (s *CodexUsageSnapshot) Normalize() *NormalizedCodexLimits {
+	if s == nil {
+		return nil
+	}
+
+	result := &NormalizedCodexLimits{}
+
+	primaryMins := s.PrimaryWindowMinutes
+	secondaryMins := s.SecondaryWindowMinutes
+	hasPrimaryWindow := primaryMins > 0
+	hasSecondaryWindow := secondaryMins > 0
+
+	use5hFromPrimary := false
+	use7dFromPrimary := false
+
+	switch {
+	case hasPrimaryWindow && hasSecondaryWindow:
+		if primaryMins < secondaryMins {
+			use5hFromPrimary = true
+		} else {
+			use7dFromPrimary = true
+		}
+	case hasPrimaryWindow:
+		if primaryMins <= 360 {
+			use5hFromPrimary = true
+		} else {
+			use7dFromPrimary = true
+		}
+	case hasSecondaryWindow:
+		if secondaryMins <= 360 {
+			use7dFromPrimary = true
+		} else {
+			use5hFromPrimary = true
+		}
+	default:
+		use7dFromPrimary = true
+	}
+
+	if use5hFromPrimary {
+		result.Used5hPercent, result.Reset5hSeconds, result.Window5hMinutes = codexWindowPointers(
+			s.PrimaryUsedPercent, s.PrimaryResetAfterSeconds, s.PrimaryWindowMinutes,
+		)
+		result.Used7dPercent, result.Reset7dSeconds, result.Window7dMinutes = codexWindowPointers(
+			s.SecondaryUsedPercent, s.SecondaryResetAfterSeconds, s.SecondaryWindowMinutes,
+		)
+	} else if use7dFromPrimary {
+		result.Used7dPercent, result.Reset7dSeconds, result.Window7dMinutes = codexWindowPointers(
+			s.PrimaryUsedPercent, s.PrimaryResetAfterSeconds, s.PrimaryWindowMinutes,
+		)
+		result.Used5hPercent, result.Reset5hSeconds, result.Window5hMinutes = codexWindowPointers(
+			s.SecondaryUsedPercent, s.SecondaryResetAfterSeconds, s.SecondaryWindowMinutes,
+		)
+	}
+
+	if result.Used5hPercent == nil && result.Used7dPercent == nil &&
+		result.Reset5hSeconds == nil && result.Reset7dSeconds == nil {
+		return nil
+	}
+	return result
+}
+
 // parseCodexUsageFromHeaders 从响应头中解析 Codex 用量快照
 func parseCodexUsageFromHeaders(h http.Header) *CodexUsageSnapshot {
 	primaryStr := h.Get("x-codex-primary-used-percent")
@@ -213,17 +304,28 @@ var usageStore sync.Map
 // StoreCodexUsage 保存某个账号的用量快照
 func StoreCodexUsage(accountID int64, snapshot *CodexUsageSnapshot) {
 	if snapshot != nil {
-		usageStore.Store(accountID, snapshot)
+		cloned := cloneCodexUsageSnapshot(snapshot)
+		usageStore.Store(accountID, cloned)
+		if store := getCodexUsagePersistenceStore(); store != nil {
+			store.SaveAsync(accountID, cloned)
+		}
 	}
 }
 
 // GetCodexUsage 获取某个账号的最新用量快照
 func GetCodexUsage(accountID int64) *CodexUsageSnapshot {
 	val, ok := usageStore.Load(accountID)
-	if !ok {
-		return nil
+	if ok {
+		return val.(*CodexUsageSnapshot)
 	}
-	return val.(*CodexUsageSnapshot)
+	if store := getCodexUsagePersistenceStore(); store != nil {
+		snapshot, err := store.Load(context.Background(), accountID)
+		if err == nil && snapshot != nil {
+			usageStore.Store(accountID, snapshot)
+			return snapshot
+		}
+	}
+	return nil
 }
 
 // probeErrorStore 存储探测过程中发现的凭证错误（accountID → error message）
