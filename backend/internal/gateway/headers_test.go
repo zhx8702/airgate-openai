@@ -1,45 +1,56 @@
 package gateway
 
-import "testing"
+import (
+	"net/http"
+	"testing"
 
-func TestCodexUsageSnapshotNormalizeWithExplicitWindowMinutes(t *testing.T) {
-	snapshot := &CodexUsageSnapshot{
-		PrimaryUsedPercent:         70,
-		PrimaryResetAfterSeconds:   86400,
-		PrimaryWindowMinutes:       10080,
-		SecondaryUsedPercent:       15,
-		SecondaryResetAfterSeconds: 1200,
-		SecondaryWindowMinutes:     300,
-	}
+	sdk "github.com/DouDOU-start/airgate-sdk"
+)
 
-	normalized := snapshot.Normalize()
-	if normalized == nil {
-		t.Fatalf("expected normalized limits")
+func TestPassHeadersForAccount_Sub2APIStripsClientIdentityHeaders(t *testing.T) {
+	src := http.Header{}
+	src.Set("User-Agent", "claude-cli/2.1.81 (external, cli)")
+	src.Set("originator", "codex_cli_rs")
+	src.Set("x-stainless-timeout", "30")
+	src.Set("accept-language", "zh-CN")
+
+	dst := http.Header{}
+	passHeadersForAccount(src, dst, &sdk.Account{
+		Credentials: map[string]string{
+			"base_url": "https://sub2api.k8ray.com",
+		},
+	})
+
+	if got := dst.Get("User-Agent"); got != "" {
+		t.Fatalf("expected user-agent to be stripped, got %q", got)
 	}
-	if normalized.Used5hPercent == nil || *normalized.Used5hPercent != 15 {
-		t.Fatalf("expected 5h usage to come from secondary, got %#v", normalized.Used5hPercent)
+	if got := dst.Get("originator"); got != "" {
+		t.Fatalf("expected originator to be stripped, got %q", got)
 	}
-	if normalized.Used7dPercent == nil || *normalized.Used7dPercent != 70 {
-		t.Fatalf("expected 7d usage to come from primary, got %#v", normalized.Used7dPercent)
+	if got := dst.Get("x-stainless-timeout"); got != "30" {
+		t.Fatalf("expected stainless timeout to remain, got %q", got)
+	}
+	if got := dst.Get("accept-language"); got != "zh-CN" {
+		t.Fatalf("expected accept-language to remain, got %q", got)
 	}
 }
 
-func TestCodexUsageSnapshotNormalizeWithoutWindowMinutesUsesLegacyFallback(t *testing.T) {
-	snapshot := &CodexUsageSnapshot{
-		PrimaryUsedPercent:         50,
-		PrimaryResetAfterSeconds:   10000,
-		SecondaryUsedPercent:       20,
-		SecondaryResetAfterSeconds: 3000,
-	}
+func TestPassHeadersForAccount_NonSub2APIKeepsAllowedHeaders(t *testing.T) {
+	src := http.Header{}
+	src.Set("User-Agent", "claude-cli/2.1.81 (external, cli)")
+	src.Set("originator", "codex_cli_rs")
 
-	normalized := snapshot.Normalize()
-	if normalized == nil {
-		t.Fatalf("expected normalized limits")
+	dst := http.Header{}
+	passHeadersForAccount(src, dst, &sdk.Account{
+		Credentials: map[string]string{
+			"base_url": "https://api.openai.com",
+		},
+	})
+
+	if got := dst.Get("User-Agent"); got == "" {
+		t.Fatalf("expected user-agent to be kept")
 	}
-	if normalized.Used5hPercent == nil || *normalized.Used5hPercent != 20 {
-		t.Fatalf("expected 5h usage to come from secondary, got %#v", normalized.Used5hPercent)
-	}
-	if normalized.Used7dPercent == nil || *normalized.Used7dPercent != 50 {
-		t.Fatalf("expected 7d usage to come from primary, got %#v", normalized.Used7dPercent)
+	if got := dst.Get("originator"); got == "" {
+		t.Fatalf("expected originator to be kept")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,6 +38,29 @@ func passHeaders(src, dst http.Header) {
 	}
 }
 
+// passHeadersForAccount 按账号上游特性透传头部。
+// 对 sub2api 这类聚合上游，去掉容易触发兼容分支的客户端标识头。
+func passHeadersForAccount(src, dst http.Header, account *sdk.Account) {
+	if !isSub2APIAccount(account) {
+		passHeaders(src, dst)
+		return
+	}
+
+	for key, values := range src {
+		lowerKey := strings.ToLower(key)
+		if !openaiAllowedHeaders[lowerKey] {
+			continue
+		}
+		switch lowerKey {
+		case "user-agent", "originator":
+			continue
+		}
+		for _, v := range values {
+			dst.Add(key, v)
+		}
+	}
+}
+
 // openaiAllowedHeaders 允许透传的请求头白名单
 var openaiAllowedHeaders = map[string]bool{
 	// 标准头
@@ -56,6 +80,22 @@ var openaiAllowedHeaders = map[string]bool{
 	"x-stainless-timeout":         true,
 	"x-stainless-read-timeout":    true,
 	"x-stainless-connect-timeout": true,
+}
+
+func isSub2APIAccount(account *sdk.Account) bool {
+	if account == nil {
+		return false
+	}
+	raw := strings.TrimSpace(account.Credentials["base_url"])
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return strings.Contains(strings.ToLower(raw), "sub2api")
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	return strings.Contains(host, "sub2api")
 }
 
 // passCodexRateLimitHeaders 透传上游 Codex 速率限制响应头
