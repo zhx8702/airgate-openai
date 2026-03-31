@@ -33,7 +33,3 @@ func (s anthropicUpstreamStrategy) allowsContinuation() bool {
 		return false
 	}
 }
-
-func (s anthropicUpstreamStrategy) isSub2APIAPIKey() bool {
-	return s == anthropicStrategySub2APIAPIKey
-}

@@ -2,21 +2,13 @@ package gateway
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tidwall/gjson"
-)
-
-const (
-	sessionStateTable         = "plugin_openai_session_states"
-	sessionStateRetention     = 7 * 24 * time.Hour
-	sessionStateCleanupPeriod = time.Hour
 )
 
 type openAISessionState struct {
@@ -30,48 +22,6 @@ type openAISessionState struct {
 	LastUpdatedAt   time.Time `json:"last_updated_at"`
 	LastResponseAt  time.Time `json:"last_response_at"`
 	LastTurnStateAt time.Time `json:"last_turn_state_at"`
-}
-
-type openAISessionStateStore struct {
-	logger *slog.Logger
-	stopCh chan struct{}
-	wg     sync.WaitGroup
-}
-
-func newOpenAISessionStateStore(logger *slog.Logger) *openAISessionStateStore {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	store := &openAISessionStateStore{
-		logger: logger,
-		stopCh: make(chan struct{}),
-	}
-	store.wg.Add(1)
-	go store.runCleanup()
-	return store
-}
-
-func (s *openAISessionStateStore) Close() {
-	if s == nil {
-		return
-	}
-	close(s.stopCh)
-	s.wg.Wait()
-}
-
-func (s *openAISessionStateStore) runCleanup() {
-	defer s.wg.Done()
-	ticker := time.NewTicker(sessionStateCleanupPeriod)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			cleanupSessionStateStore()
-		case <-s.stopCh:
-			return
-		}
-	}
 }
 
 func normalizeSessionValue(value string) string {
@@ -392,33 +342,6 @@ func touchSessionState(sessionKey string, update func(*openAISessionState)) {
 	upsertSessionState(current)
 }
 
-func cleanupSessionStateStore() {
-	now := time.Now().UTC()
-	sessionStateStore.Range(func(key, value any) bool {
-		sessionKey, _ := key.(string)
-		state, _ := value.(*openAISessionState)
-		if sessionKey == "" || state == nil {
-			sessionStateStore.Delete(key)
-			return true
-		}
-		lastSeen := state.LastSeenAt
-		if lastSeen.IsZero() {
-			lastSeen = state.LastUpdatedAt
-		}
-		if lastSeen.IsZero() || now.Sub(lastSeen) > sessionStateRetention {
-			sessionStateStore.Delete(key)
-		}
-		return true
-	})
-	anthropicDigestStore.Range(func(key, value any) bool {
-		entry, _ := value.(*anthropicDigestEntry)
-		if entry == nil || now.Sub(entry.UpdatedAt) > sessionStateRetention {
-			anthropicDigestStore.Delete(key)
-		}
-		return true
-	})
-}
-
 func updateSessionStateFromRequest(resolution openAISessionResolution) {
 	if resolution.SessionKey == "" {
 		return
@@ -478,21 +401,4 @@ func decodeTurnStateHeader(headers http.Header) string {
 		return ""
 	}
 	return strings.TrimSpace(headers.Get("x-codex-turn-state"))
-}
-
-func encodeSessionStateForLog(state *openAISessionState) string {
-	if state == nil {
-		return ""
-	}
-	payload, err := json.Marshal(state)
-	if err != nil {
-		return ""
-	}
-	return string(payload)
-}
-
-func sessionStateDebugString(resolution openAISessionResolution) string {
-	return fmt.Sprintf("session_key=%q session_id=%q conversation_id=%q prompt_cache_key=%q previous_response_id=%q from_stored=%v",
-		resolution.SessionKey, resolution.SessionID, resolution.ConversationID, resolution.PromptCacheKey, resolution.PreviousRespID, resolution.FromStoredState,
-	)
 }
