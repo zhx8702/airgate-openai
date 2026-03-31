@@ -470,7 +470,7 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 	}
 
 	elapsed := time.Since(start)
-	return &sdk.ForwardResult{
+	result := &sdk.ForwardResult{
 		StatusCode:            http.StatusOK,
 		Model:                 billingModel,
 		InputTokens:           wsResult.InputTokens,
@@ -480,7 +480,9 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 		ServiceTier:           "priority",
 		Duration:              elapsed,
 		FirstTokenMs:          elapsed.Milliseconds(),
-	}, nil
+	}
+	fillCost(result)
+	return result, nil
 }
 
 // ──────────────────────────────────────────────────────

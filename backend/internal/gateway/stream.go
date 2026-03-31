@@ -92,6 +92,7 @@ func handleStreamResponse(resp *http.Response, w http.ResponseWriter, start time
 		}
 		return result, streamErr
 	}
+	fillCost(result)
 	return result, nil
 }
 
@@ -112,7 +113,7 @@ func handleNonStreamResponse(resp *http.Response, w http.ResponseWriter, start t
 	}
 
 	elapsed := time.Since(start)
-	return &sdk.ForwardResult{
+	result := &sdk.ForwardResult{
 		StatusCode:            resp.StatusCode,
 		InputTokens:           usage.inputTokens,
 		OutputTokens:          usage.outputTokens,
@@ -121,7 +122,9 @@ func handleNonStreamResponse(resp *http.Response, w http.ResponseWriter, start t
 		Model:                 gjson.GetBytes(body, "model").String(),
 		Duration:              elapsed,
 		FirstTokenMs:          elapsed.Milliseconds(),
-	}, nil
+	}
+	fillCost(result)
+	return result, nil
 }
 
 // ParseSSEStream 从 SSE 流中解析事件，通过 handler 回调输出，返回统一的 WSResult

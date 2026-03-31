@@ -539,5 +539,6 @@ done:
 		result.StatusCode = http.StatusBadGateway
 		return result, streamErr
 	}
+	fillCost(result)
 	return result, nil
 }

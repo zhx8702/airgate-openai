@@ -503,6 +503,27 @@ func (g *OpenAIGateway) HandleRequest(ctx context.Context, _, path, _ string, _ 
 	}
 }
 
+// fillCost 根据模型定价填充 ForwardResult 的费用字段
+func fillCost(result *sdk.ForwardResult) {
+	if result == nil || result.Model == "" {
+		return
+	}
+	spec := model.Lookup(result.Model)
+	cost := sdk.CalculateCost(sdk.CostInput{
+		InputTokens:       result.InputTokens,
+		OutputTokens:      result.OutputTokens,
+		CachedInputTokens: result.CachedInputTokens,
+		ServiceTier:       result.ServiceTier,
+	}, sdk.ModelInfo{
+		InputPrice:       spec.InputPrice,
+		OutputPrice:      spec.OutputPrice,
+		CachedInputPrice: spec.CachedPrice,
+	})
+	result.InputCost = cost.InputCost
+	result.OutputCost = cost.OutputCost
+	result.CachedInputCost = cost.CachedInputCost
+}
+
 func jsonError(msg string) []byte {
 	b, _ := json.Marshal(map[string]string{"error": msg})
 	return b

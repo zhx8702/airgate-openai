@@ -303,6 +303,7 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 		fwdResult.StatusCode = http.StatusBadGateway
 		return fwdResult, result.Err
 	}
+	fillCost(fwdResult)
 	return fwdResult, nil
 }
 
