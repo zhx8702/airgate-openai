@@ -410,6 +410,7 @@ func translateResponsesSSEToAnthropicSSE(
 
 	var streamErr error
 	var firstTokenMs int64
+	var serviceTier string // 从上游 response.completed 事件中提取
 	skipCurrentOutput := false
 	firstTokenRecorded := false
 
@@ -446,6 +447,10 @@ func translateResponsesSSEToAnthropicSSE(
 				}
 			}
 			if eventType == "response.completed" || eventType == "response.done" {
+				// 从上游 response.completed 事件中提取 service_tier
+				if tier := normalizeOpenAIServiceTier(gjson.Get(data, "response.service_tier").String()); tier != "" {
+					serviceTier = tier
+				}
 				usageNode := gjson.Get(data, "response.usage")
 				slog.Info("[Anthropic←Responses] 上游 usage",
 					"session", session.SessionKey,
@@ -520,6 +525,7 @@ done:
 		OutputTokens:          state.OutputTokens,
 		CachedInputTokens:     state.CachedInputTokens,
 		ReasoningOutputTokens: state.ReasoningOutputTokens,
+		ServiceTier:           serviceTier,
 		Model:                 billingModel,
 		Duration:              time.Since(start),
 		FirstTokenMs:          firstTokenMs,

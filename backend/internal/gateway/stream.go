@@ -119,6 +119,7 @@ func handleNonStreamResponse(resp *http.Response, w http.ResponseWriter, start t
 		OutputTokens:          usage.outputTokens,
 		CachedInputTokens:     usage.cachedInputTokens,
 		ReasoningOutputTokens: usage.reasoningOutputTokens,
+		ServiceTier:           normalizeOpenAIServiceTier(gjson.GetBytes(body, "service_tier").String()),
 		Model:                 gjson.GetBytes(body, "model").String(),
 		Duration:              elapsed,
 		FirstTokenMs:          elapsed.Milliseconds(),
@@ -262,6 +263,10 @@ func parseSSEUsage(data []byte, result *sdk.ForwardResult) {
 			return
 		}
 		result.Model = resp.Get("model").String()
+		// 从上游 response.completed 事件中提取 service_tier
+		if tier := normalizeOpenAIServiceTier(resp.Get("service_tier").String()); tier != "" {
+			result.ServiceTier = tier
+		}
 		usage := resp.Get("usage")
 		if usage.Exists() {
 			result.InputTokens = int(usage.Get("input_tokens").Int())

@@ -341,6 +341,11 @@ func (g *OpenAIGateway) forwardAnthropicResponses(
 		return result, nil, err
 	}
 
+	// 捕获上游 Codex 用量头
+	if snapshot := parseCodexUsageFromHeaders(resp.Header); snapshot != nil {
+		StoreCodexUsage(account.ID, snapshot)
+	}
+
 	// 流式 / 非流式响应处理
 	isStream := gjson.GetBytes(req.Body, "stream").Bool()
 	if isStream && w != nil {
@@ -469,6 +474,11 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 		billingModel = gjson.Get(anthropicJSON, "model").String()
 	}
 
+	// 从上游 response.completed 事件中提取 service_tier
+	serviceTier := normalizeOpenAIServiceTier(
+		gjson.GetBytes(wsResult.CompletedEventRaw, "response.service_tier").String(),
+	)
+
 	elapsed := time.Since(start)
 	result := &sdk.ForwardResult{
 		StatusCode:            http.StatusOK,
@@ -477,7 +487,7 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 		OutputTokens:          wsResult.OutputTokens,
 		CachedInputTokens:     wsResult.CachedInputTokens,
 		ReasoningOutputTokens: wsResult.ReasoningOutputTokens,
-		ServiceTier:           "priority",
+		ServiceTier:           serviceTier,
 		Duration:              elapsed,
 		FirstTokenMs:          elapsed.Milliseconds(),
 	}
