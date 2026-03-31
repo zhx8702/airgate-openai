@@ -409,7 +409,9 @@ func translateResponsesSSEToAnthropicSSE(
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 
 	var streamErr error
+	var firstTokenMs int64
 	skipCurrentOutput := false
+	firstTokenRecorded := false
 
 	for scanner.Scan() {
 		skipCurrentOutput = false
@@ -490,6 +492,11 @@ func translateResponsesSSEToAnthropicSSE(
 			output = convertResponsesEventToAnthropic(line, originalRequest, state, model)
 		}
 		if output != "" {
+			// 记录首 token 延迟（首次产生有效输出事件）
+			if !firstTokenRecorded {
+				firstTokenMs = time.Since(start).Milliseconds()
+				firstTokenRecorded = true
+			}
 			_, _ = fmt.Fprint(w, output)
 			if flusher != nil {
 				flusher.Flush()
@@ -515,6 +522,7 @@ done:
 		ReasoningOutputTokens: state.ReasoningOutputTokens,
 		Model:                 billingModel,
 		Duration:              time.Since(start),
+		FirstTokenMs:          firstTokenMs,
 	}
 	if streamErr != nil {
 		var failure *responsesFailureError

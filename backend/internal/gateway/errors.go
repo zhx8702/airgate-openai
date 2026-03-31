@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/tidwall/sjson"
+
+	sdk "github.com/DouDOU-start/airgate-sdk"
 )
 
 // ──────────────────────────────────────────────────────
@@ -12,16 +14,16 @@ import (
 // ──────────────────────────────────────────────────────
 
 // accountStatusFromCode 根据 HTTP 状态码推断账号状态（供核心调度使用）
-func accountStatusFromCode(statusCode int) string {
+func accountStatusFromCode(statusCode int) sdk.AccountStatus {
 	switch statusCode {
 	case 429:
-		return "rate_limited"
+		return sdk.AccountStatusRateLimited
 	case 401:
-		return "expired"
+		return sdk.AccountStatusExpired
 	case 403:
-		return "disabled"
+		return sdk.AccountStatusDisabled
 	default:
-		return ""
+		return sdk.AccountStatusOK
 	}
 }
 

@@ -25,7 +25,7 @@ type responsesFailureError struct {
 	Kind               responsesFailureKind
 	StatusCode         int
 	AnthropicErrorType string
-	AccountStatus      string
+	AccountStatus      sdk.AccountStatus
 	Message            string
 	RetryAfter         time.Duration
 }

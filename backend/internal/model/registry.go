@@ -69,7 +69,8 @@ func AllSpecs() []sdk.ModelInfo {
 		models = append(models, sdk.ModelInfo{
 			ID:               id,
 			Name:             spec.Name,
-			MaxTokens:        spec.ContextWindow,
+			ContextWindow:    spec.ContextWindow,
+			MaxOutputTokens:  spec.MaxOutputTokens,
 			InputPrice:       spec.InputPrice,
 			OutputPrice:      spec.OutputPrice,
 			CachedInputPrice: spec.CachedPrice,

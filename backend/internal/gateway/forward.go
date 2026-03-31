@@ -287,6 +287,7 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 		}
 	}
 
+	elapsed := time.Since(start)
 	fwdResult := &sdk.ForwardResult{
 		StatusCode:            http.StatusOK,
 		InputTokens:           result.InputTokens,
@@ -295,7 +296,8 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 		ReasoningOutputTokens: result.ReasoningOutputTokens,
 		ServiceTier:           normalizeOpenAIServiceTier(gjson.GetBytes(createMsg, "service_tier").String()),
 		Model:                 result.Model,
-		Duration:              time.Since(start),
+		Duration:              elapsed,
+		FirstTokenMs:          elapsed.Milliseconds(),
 	}
 	if result.Err != nil {
 		fwdResult.StatusCode = http.StatusBadGateway

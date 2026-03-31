@@ -37,6 +37,7 @@ func handleStreamResponse(resp *http.Response, w http.ResponseWriter, start time
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	var streamErr error
+	firstTokenRecorded := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -53,6 +54,12 @@ func handleStreamResponse(resp *http.Response, w http.ResponseWriter, start time
 		data, ok := extractSSEData(line)
 		if !ok || len(data) == 0 || data == "[DONE]" {
 			continue
+		}
+
+		// 记录首 token 延迟（首次收到含数据的 SSE 行）
+		if !firstTokenRecorded {
+			result.FirstTokenMs = time.Since(start).Milliseconds()
+			firstTokenRecorded = true
 		}
 
 		// 解析 usage（仅在 response.completed 事件中）
@@ -104,14 +111,16 @@ func handleNonStreamResponse(resp *http.Response, w http.ResponseWriter, start t
 		_, _ = w.Write(body)
 	}
 
+	elapsed := time.Since(start)
 	return &sdk.ForwardResult{
 		StatusCode:            resp.StatusCode,
 		InputTokens:           usage.inputTokens,
 		OutputTokens:          usage.outputTokens,
-		CachedInputTokens:     usage.cacheTokens,
+		CachedInputTokens:     usage.cachedInputTokens,
 		ReasoningOutputTokens: usage.reasoningOutputTokens,
 		Model:                 gjson.GetBytes(body, "model").String(),
-		Duration:              time.Since(start),
+		Duration:              elapsed,
+		FirstTokenMs:          elapsed.Milliseconds(),
 	}, nil
 }
 
@@ -332,7 +341,7 @@ func parseSSEFailureEvent(data []byte) error {
 type openaiUsage struct {
 	inputTokens           int
 	outputTokens          int
-	cacheTokens           int
+	cachedInputTokens     int
 	reasoningOutputTokens int
 }
 
@@ -363,7 +372,7 @@ func parseUsage(body []byte) openaiUsage {
 	if cacheRead == 0 {
 		cacheRead = int(usageNode.Get("prompt_tokens_details.cached_tokens").Int())
 	}
-	usage.cacheTokens = cacheRead
+	usage.cachedInputTokens = cacheRead
 
 	// 从 input_tokens 中扣除缓存部分，避免计费器重复计算
 	if cacheRead > 0 && usage.inputTokens >= cacheRead {

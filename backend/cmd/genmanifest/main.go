@@ -46,7 +46,8 @@ type routeDef struct {
 type modelInfo struct {
 	ID               string  `yaml:"id"`
 	Name             string  `yaml:"name"`
-	MaxTokens        int     `yaml:"max_tokens"`
+	ContextWindow    int     `yaml:"context_window"`
+	MaxOutputTokens  int     `yaml:"max_output_tokens"`
 	InputPrice       float64 `yaml:"input_price"`
 	OutputPrice      float64 `yaml:"output_price"`
 	CachedInputPrice float64 `yaml:"cached_input_price,omitempty"`
@@ -167,7 +168,8 @@ func convertModels(models []sdk.ModelInfo) []modelInfo {
 		items = append(items, modelInfo{
 			ID:               model.ID,
 			Name:             model.Name,
-			MaxTokens:        model.MaxTokens,
+			ContextWindow:    model.ContextWindow,
+			MaxOutputTokens:  model.MaxOutputTokens,
 			InputPrice:       model.InputPrice,
 			OutputPrice:      model.OutputPrice,
 			CachedInputPrice: model.CachedInputPrice,

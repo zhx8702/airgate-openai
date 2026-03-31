@@ -469,6 +469,7 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 		billingModel = gjson.Get(anthropicJSON, "model").String()
 	}
 
+	elapsed := time.Since(start)
 	return &sdk.ForwardResult{
 		StatusCode:            http.StatusOK,
 		Model:                 billingModel,
@@ -477,7 +478,8 @@ func (g *OpenAIGateway) handleAnthropicNonStreamFromResponses(
 		CachedInputTokens:     wsResult.CachedInputTokens,
 		ReasoningOutputTokens: wsResult.ReasoningOutputTokens,
 		ServiceTier:           "priority",
-		Duration:              time.Since(start),
+		Duration:              elapsed,
+		FirstTokenMs:          elapsed.Milliseconds(),
 	}, nil
 }
 

@@ -55,79 +55,92 @@ gateway:
   models:
     - id: gpt-5
       name: GPT 5
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.25
       output_price: 10
       cached_input_price: 0.125
     - id: gpt-5-codex
       name: GPT 5 Codex
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.25
       output_price: 10
       cached_input_price: 0.125
     - id: gpt-5-codex-mini
       name: GPT 5 Codex Mini
-      max_tokens: 128000
+      context_window: 128000
+      max_output_tokens: 128000
       input_price: 0.25
       output_price: 2
       cached_input_price: 0.025
     - id: gpt-5-mini
       name: GPT 5 Mini
-      max_tokens: 128000
+      context_window: 128000
+      max_output_tokens: 16384
       input_price: 0.125
       output_price: 1
       cached_input_price: 0.025
     - id: gpt-5.1
       name: GPT 5.1
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.25
       output_price: 10
       cached_input_price: 0.125
     - id: gpt-5.1-codex
       name: GPT 5.1 Codex
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.25
       output_price: 10
       cached_input_price: 0.125
     - id: gpt-5.1-codex-max
       name: GPT 5.1 Codex Max
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.25
       output_price: 10
       cached_input_price: 0.125
     - id: gpt-5.1-codex-mini
       name: GPT 5.1 Codex Mini
-      max_tokens: 128000
+      context_window: 128000
+      max_output_tokens: 128000
       input_price: 0.25
       output_price: 2
       cached_input_price: 0.025
     - id: gpt-5.2
       name: GPT 5.2
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.75
       output_price: 14
       cached_input_price: 0.175
     - id: gpt-5.2-codex
       name: GPT 5.2 Codex
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.75
       output_price: 14
       cached_input_price: 0.175
     - id: gpt-5.3-codex
       name: GPT 5.3 Codex
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 1.75
       output_price: 14
       cached_input_price: 0.175
     - id: gpt-5.3-codex-spark
       name: GPT 5.3 Codex Spark
-      max_tokens: 128000
+      context_window: 128000
+      max_output_tokens: 128000
       input_price: 1.75
       output_price: 14
       cached_input_price: 0.175
     - id: gpt-5.4
       name: GPT 5.4
-      max_tokens: 272000
+      context_window: 272000
+      max_output_tokens: 128000
       input_price: 2.5
       output_price: 15
       cached_input_price: 0.25
