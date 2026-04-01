@@ -263,7 +263,7 @@ func (g *OpenAIGateway) forwardOAuth(ctx context.Context, req *sdk.ForwardReques
 	if err != nil {
 		return nil, err
 	}
-	if result.Err != nil && strings.Contains(result.Err.Error(), "上游续链锚点失效") {
+	if result.Err != nil && (strings.Contains(result.Err.Error(), "上游续链锚点失效") || strings.Contains(strings.ToLower(result.Err.Error()), "previous response")) {
 		if retried, changed := dropPreviousResponseIDFromJSON(createMsg); changed {
 			g.logger.Warn("检测到 previous_response_id 失效，降级为 full create 重试一次", "session", session.SessionKey)
 			result, err = runAttempt(retried, w)
