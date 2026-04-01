@@ -522,6 +522,11 @@ func fillCost(result *sdk.ForwardResult) {
 	result.InputCost = cost.InputCost
 	result.OutputCost = cost.OutputCost
 	result.CachedInputCost = cost.CachedInputCost
+
+	// 回填单价（$/1M token）
+	result.InputPrice = spec.InputPrice
+	result.OutputPrice = spec.OutputPrice
+	result.CachedInputPrice = spec.CachedPrice
 }
 
 func jsonError(msg string) []byte {
