@@ -31,7 +31,9 @@ const inputStyle: React.CSSProperties = {
   display: 'block',
   width: '100%',
   borderRadius: cssVar('radiusMd'),
-  border: `1px solid ${cssVar('glassBorder')}`,
+  borderWidth: '1px',
+  borderStyle: 'solid',
+  borderColor: cssVar('glassBorder'),
   backgroundColor: cssVar('bgSurface'),
   padding: '0.5rem 0.75rem',
   fontSize: '0.875rem',
@@ -58,7 +60,9 @@ const labelStyle: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  border: `1px solid ${cssVar('glassBorder')}`,
+  borderWidth: '1px',
+  borderStyle: 'solid',
+  borderColor: cssVar('glassBorder'),
   borderRadius: cssVar('radiusLg'),
   padding: '1rem',
   cursor: 'pointer',
@@ -66,8 +70,13 @@ const cardStyle: React.CSSProperties = {
 };
 
 const cardActiveStyle: React.CSSProperties = {
-  ...cardStyle,
+  borderWidth: '1px',
+  borderStyle: 'solid',
   borderColor: cssVar('primary'),
+  borderRadius: cssVar('radiusLg'),
+  padding: '1rem',
+  cursor: 'pointer',
+  transition: 'border-color 0.2s, background-color 0.2s',
   backgroundColor: cssVar('primarySubtle'),
 };
 
@@ -195,12 +204,41 @@ export function AccountForm({
 
   const copyAuthorizeURL = useCallback(async () => {
     if (!authorizeURL) return;
-    try {
-      await navigator.clipboard.writeText(authorizeURL);
-      setOAuthStatus({ type: 'success', text: '授权链接已复制到剪贴板。' });
-    } catch {
-      setOAuthStatus({ type: 'error', text: '复制失败，请手动复制授权链接。' });
+
+    // 尝试 1: Clipboard API（HTTPS 下可用）
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(authorizeURL);
+        setOAuthStatus({ type: 'success', text: '授权链接已复制到剪贴板。' });
+        return;
+      } catch { /* 继续回退 */ }
     }
+
+    // 尝试 2: execCommand（兼容旧浏览器和部分 HTTP 场景）
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = authorizeURL;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (ok) {
+        setOAuthStatus({ type: 'success', text: '授权链接已复制到剪贴板。' });
+        return;
+      }
+    } catch { /* 继续回退 */ }
+
+    // 尝试 3: 选中授权链接文本，提示用户手动 Ctrl+C
+    const el = document.querySelector<HTMLTextAreaElement>('textarea[readonly]');
+    if (el) {
+      el.focus();
+      el.select();
+    }
+    setOAuthStatus({ type: 'error', text: '自动复制不可用，请手动选中上方链接并按 Ctrl+C 复制。' });
   }, [authorizeURL]);
 
   return (
@@ -267,7 +305,9 @@ export function AccountForm({
           {/* 订阅信息展示 */}
           {(planType || subscriptionUntil) && (
             <div style={{
-              border: `1px solid ${cssVar('glassBorder')}`,
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: cssVar('glassBorder'),
               borderRadius: cssVar('radiusLg'),
               padding: '0.875rem 1rem',
               backgroundColor: cssVar('bgSurface'),
@@ -304,7 +344,7 @@ export function AccountForm({
           )}
 
           {oauth && (
-            <div style={{ border: `1px solid ${cssVar('glassBorder')}`, borderRadius: cssVar('radiusLg'), padding: '1rem', backgroundColor: cssVar('bgSurface') }}>
+            <div style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: cssVar('glassBorder'), borderRadius: cssVar('radiusLg'), padding: '1rem', backgroundColor: cssVar('bgSurface') }}>
               <div style={{ fontSize: '0.875rem', fontWeight: 600, color: cssVar('text'), marginBottom: '0.25rem' }}>
                 OAuth 授权辅助
               </div>
@@ -321,7 +361,7 @@ export function AccountForm({
                     cursor: oauthLoading ? 'not-allowed' : 'pointer',
                     backgroundColor: cssVar('primary'),
                     color: 'white',
-                    border: 'none',
+                    borderColor: 'transparent',
                     fontWeight: 500,
                     width: 'auto',
                     opacity: oauthLoading ? 0.6 : 1,
@@ -348,7 +388,7 @@ export function AccountForm({
               <div style={{ marginBottom: '0.75rem' }}>
                 <label style={labelStyle}>授权链接</label>
                 <textarea
-                  style={{ ...inputStyle, minHeight: '76px', resize: 'vertical' }}
+                  style={{ ...inputStyle, minHeight: '155px', resize: 'vertical' }}
                   readOnly
                   placeholder='点击"生成授权链接"后，这里会显示完整授权地址'
                   value={authorizeURL}
@@ -373,7 +413,7 @@ export function AccountForm({
                     cursor: !callbackURL.trim() || oauthLoading ? 'not-allowed' : 'pointer',
                     backgroundColor: 'transparent',
                     color: cssVar('primary'),
-                    border: `1px solid ${cssVar('primary')}`,
+                    borderColor: cssVar('primary'),
                     width: 'auto',
                     opacity: !callbackURL.trim() || oauthLoading ? 0.6 : 1,
                   }}
