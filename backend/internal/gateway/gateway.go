@@ -25,6 +25,7 @@ type OpenAIGateway struct {
 	logger        *slog.Logger
 	ctx           sdk.PluginContext
 	snapshotStore *codexUsagePersistenceStore
+	transportPool *TransportPool
 }
 
 func (g *OpenAIGateway) Info() sdk.PluginInfo {
@@ -33,6 +34,7 @@ func (g *OpenAIGateway) Info() sdk.PluginInfo {
 
 func (g *OpenAIGateway) Init(ctx sdk.PluginContext) error {
 	g.ctx = ctx
+	g.transportPool = NewTransportPool()
 	if ctx != nil {
 		g.logger = ctx.Logger()
 	}
@@ -63,6 +65,9 @@ func (g *OpenAIGateway) Start(_ context.Context) error {
 }
 
 func (g *OpenAIGateway) Stop(_ context.Context) error {
+	if g.transportPool != nil {
+		g.transportPool.CloseIdle()
+	}
 	if g.snapshotStore != nil {
 		setCodexUsagePersistenceStore(nil)
 		if err := g.snapshotStore.Close(); err != nil {

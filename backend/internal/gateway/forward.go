@@ -3,13 +3,10 @@ package gateway
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -400,23 +397,9 @@ func (g *OpenAIGateway) requestTimeout() time.Duration {
 }
 
 // buildHTTPClient 构建带代理支持的 HTTP 客户端
+// 使用 TransportPool 按账户+代理隔离连接，同一账户复用连接
 func (g *OpenAIGateway) buildHTTPClient(account *sdk.Account) *http.Client {
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     90 * time.Second,
-	}
-
-	if account.ProxyURL != "" {
-		if proxyURL, err := url.Parse(account.ProxyURL); err == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
-		}
-	}
+	transport := g.transportPool.GetTransport(account.ID, account.ProxyURL)
 
 	return &http.Client{
 		Transport: transport,
