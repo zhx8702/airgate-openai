@@ -18,8 +18,18 @@ AirGate 的 OpenAI 网关插件。
 | POST | `/v1/responses` | Responses API（Codex 核心端点）|
 | POST | `/v1/chat/completions` | Chat Completions API |
 | POST | `/v1/messages` | Anthropic Messages API（协议翻译）|
+| POST | `/v1/messages/count_tokens` | Anthropic Count Tokens（兼容回退） |
 | GET | `/v1/models` | 模型列表 |
 | WS | `/v1/responses` | Responses API（WebSocket）|
+
+另外还提供不带 `/v1` 前缀的别名路由：
+
+- `POST /responses`
+- `POST /chat/completions`
+- `POST /messages`
+- `POST /messages/count_tokens`
+- `GET /models`
+- `WS /responses`
 
 ## 账号类型
 
