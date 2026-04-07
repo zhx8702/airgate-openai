@@ -12,6 +12,9 @@ var simpleInstructions string
 //go:embed instructions-nsfw.md
 var nsfwInstructions string
 
+//go:embed instructions-cc.md
+var ccInstructions string
+
 // DefaultInstructions 是完整版本的系统提示词。
 var DefaultInstructions = defaultInstructions
 
@@ -21,11 +24,14 @@ var SimpleInstructions = simpleInstructions
 // NsfwInstructions 是 NSFW 版本的系统提示词。
 var NsfwInstructions = nsfwInstructions
 
+// CCInstructions 是 CC 版本的系统提示词。
+var CCInstructions = ccInstructions
+
 // Instructions 是当前使用的系统提示词，切换时只需修改此处
 var Instructions = NsfwInstructions
 
 // ResolveInstructions 根据名称解析 instructions 内容。
-// 支持内置别名 "default" / "simple" / "nsfw"，其他值原样返回（视为完整 instructions 文本）。
+// 支持内置别名 "default" / "simple" / "nsfw" / "cc"，其他值原样返回（视为完整 instructions 文本）。
 func ResolveInstructions(name string) string {
 	switch name {
 	case "default":
@@ -34,6 +40,8 @@ func ResolveInstructions(name string) string {
 		return SimpleInstructions
 	case "nsfw":
 		return NsfwInstructions
+	case "cc":
+		return CCInstructions
 	default:
 		return name
 	}

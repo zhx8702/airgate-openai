@@ -51,6 +51,7 @@ func BuildPluginInfo() sdk.PluginInfo {
 		FrontendWidgets: []sdk.FrontendWidget{
 			{Slot: sdk.SlotAccountForm, EntryFile: "index.js", Title: "账号表单"},
 		},
+		InstructionPresets: []string{"default", "simple", "nsfw", "cc"},
 	}
 }
 
